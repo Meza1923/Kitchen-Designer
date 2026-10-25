@@ -1,0 +1,22 @@
+# Dependencies and build output (recreated by npm install / docker compose build)
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local databases and environment files
+*.db
+*.sqlite3
+.env
+.env.*
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { @apply bg-slate-100 text-slate-800 antialiased; font-family: ui-sans-serif, system-ui, sans-serif; }
+
+.field { @apply w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none; }
+.btn { @apply inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50; }
+.btn-primary { @apply border-blue-600 bg-blue-600 text-white hover:bg-blue-700; }
+.chip { @apply rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50; }
+.chip-active { @apply border-blue-600 bg-blue-600 text-white hover:bg-blue-700; }
+.label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500; }

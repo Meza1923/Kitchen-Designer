@@ -1,0 +1,6 @@
+# Keep LF line endings in the repo and on checkout, also on Windows,
+# so Dockerfiles and scripts work the same inside the Linux containers.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
