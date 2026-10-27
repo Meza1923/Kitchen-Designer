@@ -1,7 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import { CATEGORY_LABELS, socketName, TALL_ZONE_LABELS } from './defaults';
-import { computeCountertops, computeGaps, computeOverlaps, computeSocketIssues, computeUnsupported, fmt, isElectrical } from './geometry';
+import {
+  computeCountertops,
+  computeGaps,
+  computeOverlaps,
+  computeSocketIssues,
+  computeUnsupported,
+  fmt,
+  isElectrical,
+} from './geometry';
 import { Drawing, drawingSize } from '../components/Drawing';
 import { PlanDrawing, planSize } from '../components/PlanDrawing';
 import { computePlanConflicts } from './plan';
@@ -17,7 +25,12 @@ function download(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const slug = (s: string) => s.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'kitchen';
+const slug = (s: string) =>
+  s
+    .trim()
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase() || 'kitchen';
 
 export function exportJson(name: string, data: ProjectData) {
   const blob = new Blob([JSON.stringify({ name, data }, null, 2)], { type: 'application/json' });
@@ -49,14 +62,19 @@ export function describeItem(item: KitchenItem): string {
     parts.push(
       [...item.tallZones]
         .reverse()
-        .map((z) => `${TALL_ZONE_LABELS[z.type]}${z.type === 'drawers' ? ` ×${z.drawerCount ?? 3}` : ''} ${fmt(z.heightPct)}%`)
+        .map(
+          (z) =>
+            `${TALL_ZONE_LABELS[z.type]}${z.type === 'drawers' ? ` ×${z.drawerCount ?? 3}` : ''} ${fmt(z.heightPct)}%`,
+        )
         .join(' / '),
     );
   }
-  if (item.category === 'sink') parts.push(`${item.sinkBowls ?? 1} bowl${(item.sinkBowls ?? 1) > 1 ? 's' : ''}${item.hasFaucet ? ', faucet' : ''}`);
+  if (item.category === 'sink')
+    parts.push(`${item.sinkBowls ?? 1} bowl${(item.sinkBowls ?? 1) > 1 ? 's' : ''}${item.hasFaucet ? ', faucet' : ''}`);
   if (item.category === 'stove') parts.push(`${item.burnerCount ?? 4} burners`);
   if (isElectrical(item.category)) parts.push(`${socketName(item)}, centre ${fmt(item.y + item.height / 2)} cm`);
-  if (item.category === 'door') parts.push(`hinge ${item.doorHinge ?? 'left'}, opens ${item.doorSwing === 'out' ? 'out' : 'in'}`);
+  if (item.category === 'door')
+    parts.push(`hinge ${item.doorHinge ?? 'left'}, opens ${item.doorSwing === 'out' ? 'out' : 'in'}`);
   if (item.hasToeKick) parts.push(`plinth ${fmt(item.toeKickHeight)}`);
   return parts.join(' · ');
 }
@@ -90,8 +108,9 @@ export function wallWarnings(wall: WallRun): string[] {
   return [
     ...gaps.map((g) => `Gap of ${g.width.toFixed(1)} cm at X ${fmt(g.x0)}–${fmt(g.x1)} (${g.layer} layer)`),
     ...computeOverlaps(wall).map((o) => `Overlap at X ${fmt(o.x0)}–${fmt(o.x1)}`),
-    ...computeSocketIssues(wall).map(({ item, reason }) =>
-      `${socketName(item)} at X ${fmt(item.x)} is ${reason === 'opening' ? 'inside a window/door opening' : 'hidden behind a cabinet'}`,
+    ...computeSocketIssues(wall).map(
+      ({ item, reason }) =>
+        `${socketName(item)} at X ${fmt(item.x)} is ${reason === 'opening' ? 'inside a window/door opening' : 'hidden behind a cabinet'}`,
     ),
     ...computeUnsupported(wall).map((i) => `${CATEGORY_LABELS[i.category]} at X ${fmt(i.x)} is not on a countertop`),
   ];
@@ -127,8 +146,15 @@ function runSummaryRows(data: ProjectData): ScheduleRow[] {
     type: w.kind === 'wall' ? `Wall · ${w.side}${w.removed ? ' (open side)' : ''}` : `Island · ${w.rotationDeg ?? 0}°`,
     x: w.kind === 'island' ? fmt(w.planX ?? 0) : '',
     y: w.kind === 'island' ? fmt(w.planY ?? 0) : '',
-    size: w.kind === 'island' ? `${fmt(w.widthCm)} × ${fmt(w.depthCm ?? 90)}` : `${fmt(w.widthCm)} × ${fmt(w.heightCm)}`,
-    config: `${w.items.length} element(s)${computeCountertops(w).length ? ` · countertop ${computeCountertops(w).map((c) => fmt(c.width)).join(' + ')} cm` : ''}`,
+    size:
+      w.kind === 'island' ? `${fmt(w.widthCm)} × ${fmt(w.depthCm ?? 90)}` : `${fmt(w.widthCm)} × ${fmt(w.heightCm)}`,
+    config: `${w.items.length} element(s)${
+      computeCountertops(w).length
+        ? ` · countertop ${computeCountertops(w)
+            .map((c) => fmt(c.width))
+            .join(' + ')} cm`
+        : ''
+    }`,
   }));
 }
 
@@ -150,7 +176,15 @@ function electricalSection(data: ProjectData): string {
       .sort((a, b) => a.x - b.x)
       .map((i) => {
         const issue = computeSocketIssues(w).find((s) => s.item.id === i.id);
-        return { wall: w.name, type: socketName(i), outlets: i.category === 'power_socket' ? 1 : i.socketCount ?? 1, x: i.x + i.width / 2, h: i.y + i.height / 2, label: i.label ?? '', issue };
+        return {
+          wall: w.name,
+          type: socketName(i),
+          outlets: i.category === 'power_socket' ? 1 : (i.socketCount ?? 1),
+          x: i.x + i.width / 2,
+          h: i.y + i.height / 2,
+          label: i.label ?? '',
+          issue,
+        };
       }),
   );
   if (!rows.length) return '';
@@ -162,7 +196,10 @@ function electricalSection(data: ProjectData): string {
     <p class="meta">Positions are to the centre of each plate: X from the wall's left end (seen from inside the room), height from the finished floor.</p>
     <table><thead><tr><th>#</th><th>Wall</th><th>Label</th><th>Type</th><th>X centre (cm)</th><th>Height centre (cm)</th><th>Note</th></tr></thead>
     <tbody>${rows
-      .map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.wall)}</td><td>${esc(r.label)}</td><td>${r.type}</td><td>${fmt(r.x)}</td><td>${fmt(r.h)}</td><td>${r.issue ? (r.issue.reason === 'opening' ? '⚠ in window/door' : '⚠ hidden by cabinet') : ''}</td></tr>`)
+      .map(
+        (r, i) =>
+          `<tr><td>${i + 1}</td><td>${esc(r.wall)}</td><td>${esc(r.label)}</td><td>${r.type}</td><td>${fmt(r.x)}</td><td>${fmt(r.h)}</td><td>${r.issue ? (r.issue.reason === 'opening' ? '⚠ in window/door' : '⚠ hidden by cabinet') : ''}</td></tr>`,
+      )
       .join('')}</tbody></table>
     <p class="meta" style="margin-top:12px"><b>Totals:</b> ${[...totals].map(([t, n]) => `${n} × ${t}`).join(' · ')} · ${outlets} regular outlets</p>
   </section>`;
@@ -248,7 +285,8 @@ export async function exportPng(projectName: string, data: ProjectData, wall: Wa
   if (blob) download(blob, `${slug(projectName)}-${slug(wall ? wall.name : 'plan')}.png`);
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+const esc = (s: string) =>
+  s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
 
 /** Opens a print-ready sheet (one page per wall) and triggers the browser's print / Save as PDF dialog. */
 export function printPdf(projectName: string, data: ProjectData) {
@@ -261,17 +299,22 @@ export function printPdf(projectName: string, data: ProjectData) {
       <p class="meta">Room ${fmt(data.room.widthCm)} × ${fmt(data.room.depthCm)} cm · ceiling ${fmt(data.room.heightCm)} cm</p>
       <div class="drawing">${plan.markup}</div>
       <table><thead><tr>${COLS.map((c) => `<th>${c.title}</th>`).join('')}</tr></thead>
-      <tbody>${runSummaryRows(data).map((r) => `<tr>${COLS.map((c) => `<td>${esc(r[c.key])}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <tbody>${runSummaryRows(data)
+        .map((r) => `<tr>${COLS.map((c) => `<td>${esc(r[c.key])}</td>`).join('')}</tr>`)
+        .join('')}</tbody></table>
       ${planConflicts.length ? `<ul class="warn">${planConflicts.map((c) => `<li>${{ clash: 'Cross-wall clash', outside: 'Island outside the room', swing: 'Door swing blocked' }[c.kind]} at plan X ${fmt(c.rect.x)}, Y ${fmt(c.rect.y)}</li>`).join('')}</ul>` : ''}
     </section>`;
-  const sections = planSection + electricalSection(data) + data.walls
-    .filter((wall) => wall.items.length > 0)
-    .map((wall) => {
-      const { markup } = wallSvg(wall);
-      const rows = scheduleRows(wall);
-      const warnings = wallWarnings(wall);
-      const counters = computeCountertops(wall);
-      return `<section>
+  const sections =
+    planSection +
+    electricalSection(data) +
+    data.walls
+      .filter((wall) => wall.items.length > 0)
+      .map((wall) => {
+        const { markup } = wallSvg(wall);
+        const rows = scheduleRows(wall);
+        const warnings = wallWarnings(wall);
+        const counters = computeCountertops(wall);
+        return `<section>
         <h1>${esc(projectName)} — ${esc(wall.name)}</h1>
         <p class="meta">Elevation · ${fmt(wall.widthCm)} × ${fmt(wall.heightCm)} cm · countertop ${fmt(wall.countertopThicknessCm)} cm</p>
         <div class="drawing">${markup}</div>
@@ -280,8 +323,8 @@ export function printPdf(projectName: string, data: ProjectData) {
         ${counters.length ? `<p class="meta">Countertop runs: ${counters.map((ct) => `${fmt(ct.width)} cm @ X ${fmt(ct.x)}`).join(', ')}</p>` : ''}
         ${warnings.length ? `<ul class="warn">${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
       </section>`;
-    })
-    .join('');
+      })
+      .join('');
   win.document.write(`<!doctype html><html><head><title>${esc(projectName)}</title><style>
     body { font-family: ui-monospace, Menlo, monospace; color: #0f172a; margin: 24px; }
     section { page-break-after: always; }

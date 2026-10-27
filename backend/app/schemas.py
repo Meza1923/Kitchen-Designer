@@ -87,9 +87,16 @@ class ProjectData(BaseModel):
 
 def default_project_data() -> ProjectData:
     room = Room()
-    sides = [("A", "north", room.widthCm), ("B", "east", room.depthCm), ("C", "south", room.widthCm), ("D", "west", room.depthCm)]
+    sides = [
+        ("A", "north", room.widthCm),
+        ("B", "east", room.depthCm),
+        ("C", "south", room.widthCm),
+        ("D", "west", room.depthCm),
+    ]
     walls = [
-        WallRun(id=str(uuid.uuid4()), name=f"Wall {letter}", kind="wall", side=side, widthCm=length, heightCm=room.heightCm)
+        WallRun(
+            id=str(uuid.uuid4()), name=f"Wall {letter}", kind="wall", side=side, widthCm=length, heightCm=room.heightCm
+        )
         for letter, side, length in sides
     ]
     return ProjectData(room=room, walls=walls, activeWallId=walls[0].id)

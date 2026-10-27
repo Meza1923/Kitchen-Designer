@@ -1,5 +1,23 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Box, Database, FileDown, FileJson, FilePlus2, FileUp, FolderOpen, Grid2x2, Image, Loader2, Printer, RectangleHorizontal, Redo2, Rows2, Ruler, Undo2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  Box,
+  Database,
+  FileDown,
+  FileJson,
+  FilePlus2,
+  FileUp,
+  FolderOpen,
+  Grid2x2,
+  Image,
+  Loader2,
+  Printer,
+  RectangleHorizontal,
+  Redo2,
+  Rows2,
+  Ruler,
+  Undo2,
+} from 'lucide-react';
 import type { ElementCategory, KitchenItem, ProjectData, Room, WallRun } from './types';
 import { createIsland, createItem, createProjectData, uid } from './lib/defaults';
 import { clampX, findFreeX, isWallMounted, layerOf, normalizeWall } from './lib/geometry';
@@ -49,8 +67,13 @@ const VIEWS: { id: View; label: string; icon: typeof Grid2x2 }[] = [
   { id: '3d', label: '3D', icon: Box },
 ];
 
-const loadedProject = (p: Pick<ProjectState, 'id' | 'name' | 'data' | 'savedAt' | 'dirty'>): ProjectState => ({ ...p, past: [], future: [] });
-const freshProject = (): ProjectState => loadedProject({ id: null, name: 'Untitled Kitchen', data: createProjectData(), savedAt: null, dirty: false });
+const loadedProject = (p: Pick<ProjectState, 'id' | 'name' | 'data' | 'savedAt' | 'dirty'>): ProjectState => ({
+  ...p,
+  past: [],
+  future: [],
+});
+const freshProject = (): ProjectState =>
+  loadedProject({ id: null, name: 'Untitled Kitchen', data: createProjectData(), savedAt: null, dirty: false });
 
 function WallOverview({ wall, onSelect }: { wall: WallRun; onSelect: (id: string) => void }) {
   const rows = scheduleRows(wall);
@@ -61,21 +84,40 @@ function WallOverview({ wall, onSelect }: { wall: WallRun; onSelect: (id: string
       <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-700">{wall.name} · Schedule</h3>
       {warnings.length > 0 && (
         <div className="mb-3 space-y-1 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-          {warnings.map((w, i) => <div key={i} className="flex gap-1.5"><AlertTriangle size={13} className="mt-px shrink-0" />{w}</div>)}
+          {warnings.map((w, i) => (
+            <div key={i} className="flex gap-1.5">
+              <AlertTriangle size={13} className="mt-px shrink-0" />
+              {w}
+            </div>
+          ))}
         </div>
       )}
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-400">No elements yet. Add some from the catalog on the left, then click one to edit it.</p>
+        <p className="text-sm text-slate-400">
+          No elements yet. Add some from the catalog on the left, then click one to edit it.
+        </p>
       ) : (
         <table className="w-full text-left font-mono text-[11px]">
           <thead className="text-slate-400">
-            <tr><th className="py-1">#</th><th>Element</th><th className="text-right">X</th><th className="text-right">W×H</th></tr>
+            <tr>
+              <th className="py-1">#</th>
+              <th>Element</th>
+              <th className="text-right">X</th>
+              <th className="text-right">W×H</th>
+            </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={sorted[i].id} className="cursor-pointer border-t border-slate-100 hover:bg-blue-50" onClick={() => onSelect(sorted[i].id)}>
+              <tr
+                key={sorted[i].id}
+                className="cursor-pointer border-t border-slate-100 hover:bg-blue-50"
+                onClick={() => onSelect(sorted[i].id)}
+              >
                 <td className="py-1 text-slate-400">{r.no}</td>
-                <td className="truncate">{r.label ? `${r.label} · ` : ''}{r.type}</td>
+                <td className="truncate">
+                  {r.label ? `${r.label} · ` : ''}
+                  {r.type}
+                </td>
                 <td className="text-right">{r.x}</td>
                 <td className="text-right">{r.size}</td>
               </tr>
@@ -125,14 +167,24 @@ export default function App() {
   const undo = useCallback(() => {
     lastEdit.current = null;
     setProject((p) =>
-      p.past.length ? { ...p, data: p.past[p.past.length - 1], past: p.past.slice(0, -1), future: [p.data, ...p.future], dirty: true } : p,
+      p.past.length
+        ? {
+            ...p,
+            data: p.past[p.past.length - 1],
+            past: p.past.slice(0, -1),
+            future: [p.data, ...p.future],
+            dirty: true,
+          }
+        : p,
     );
   }, []);
 
   const redo = useCallback(() => {
     lastEdit.current = null;
     setProject((p) =>
-      p.future.length ? { ...p, data: p.future[0], past: [...p.past, p.data], future: p.future.slice(1), dirty: true } : p,
+      p.future.length
+        ? { ...p, data: p.future[0], past: [...p.past, p.data], future: p.future.slice(1), dirty: true }
+        : p,
     );
   }, []);
 
@@ -149,7 +201,9 @@ export default function App() {
         (d) => ({
           ...d,
           walls: d.walls.map((w) =>
-            w.items.some((i) => i.id === id) ? normalizeWall({ ...w, items: w.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) }) : w,
+            w.items.some((i) => i.id === id)
+              ? normalizeWall({ ...w, items: w.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) })
+              : w,
           ),
         }),
         { key: `item:${id}:${Object.keys(patch).sort().join(',')}` },
@@ -202,7 +256,12 @@ export default function App() {
 
   const deleteItem = useCallback(
     (id: string) => {
-      setData((d) => ({ ...d, walls: d.walls.map((w) => (w.items.some((i) => i.id === id) ? { ...w, items: w.items.filter((i) => i.id !== id) } : w)) }));
+      setData((d) => ({
+        ...d,
+        walls: d.walls.map((w) =>
+          w.items.some((i) => i.id === id) ? { ...w, items: w.items.filter((i) => i.id !== id) } : w,
+        ),
+      }));
       setSelectedId(null);
     },
     [setData],
@@ -272,7 +331,15 @@ export default function App() {
     run('load', async () => {
       if (!confirmDiscard()) return;
       const rec = await api.get(id);
-      setProject(loadedProject({ id: rec.id, name: rec.name, data: migrateProjectData(rec.data), savedAt: rec.updated_at, dirty: false }));
+      setProject(
+        loadedProject({
+          id: rec.id,
+          name: rec.name,
+          data: migrateProjectData(rec.data),
+          savedAt: rec.updated_at,
+          dirty: false,
+        }),
+      );
       setSelectedId(null);
       setShowLoad(false);
     });
@@ -304,59 +371,117 @@ export default function App() {
           placeholder="Project name"
         />
         <span className="font-mono text-[11px] text-slate-400">
-          {project.dirty ? '● unsaved changes' : project.savedAt ? `saved ${new Date(project.savedAt).toLocaleString()}` : 'not saved'}
+          {project.dirty
+            ? '● unsaved changes'
+            : project.savedAt
+              ? `saved ${new Date(project.savedAt).toLocaleString()}`
+              : 'not saved'}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <button className="btn px-1.5" title="Undo (⌘/Ctrl+Z)" disabled={!project.past.length} onClick={undo}><Undo2 size={14} /></button>
-          <button className="btn px-1.5" title="Redo (⇧⌘/Ctrl+Shift+Z)" disabled={!project.future.length} onClick={redo}><Redo2 size={14} /></button>
+          <button className="btn px-1.5" title="Undo (⌘/Ctrl+Z)" disabled={!project.past.length} onClick={undo}>
+            <Undo2 size={14} />
+          </button>
+          <button
+            className="btn px-1.5"
+            title="Redo (⇧⌘/Ctrl+Shift+Z)"
+            disabled={!project.future.length}
+            onClick={redo}
+          >
+            <Redo2 size={14} />
+          </button>
           <span className="mx-1 h-5 w-px bg-slate-600" />
-          <button className="btn" onClick={() => { if (confirmDiscard()) { setProject(freshProject()); setSelectedId(null); } }}><FilePlus2 size={14} /> New</button>
-          <button className="btn" onClick={() => setShowLoad(true)}><FolderOpen size={14} /> Load Project</button>
+          <button
+            className="btn"
+            onClick={() => {
+              if (confirmDiscard()) {
+                setProject(freshProject());
+                setSelectedId(null);
+              }
+            }}
+          >
+            <FilePlus2 size={14} /> New
+          </button>
+          <button className="btn" onClick={() => setShowLoad(true)}>
+            <FolderOpen size={14} /> Load Project
+          </button>
           <button className="btn btn-primary" disabled={busy === 'save' || !project.name.trim()} onClick={save}>
             {busy === 'save' ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />} Save to DB
           </button>
           <span className="mx-1 h-5 w-px bg-slate-600" />
-          <button className="btn" onClick={() => exportJson(project.name, data)}><FileJson size={14} /> Export JSON</button>
-          <button className="btn" onClick={() => importRef.current?.click()}><FileUp size={14} /> Import JSON</button>
-          <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onImport(f);
-            e.target.value = '';
-          }} />
-          <button className="btn" disabled={busy === 'png'} onClick={() => run('png', () => exportPng(project.name, data, view === 'elevation' ? wall : null))}><Image size={14} /> PNG</button>
-          <button className="btn" onClick={() => run('print', async () => printPdf(project.name, data))}><Printer size={14} /> Print / PDF</button>
+          <button className="btn" onClick={() => exportJson(project.name, data)}>
+            <FileJson size={14} /> Export JSON
+          </button>
+          <button className="btn" onClick={() => importRef.current?.click()}>
+            <FileUp size={14} /> Import JSON
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onImport(f);
+              e.target.value = '';
+            }}
+          />
+          <button
+            className="btn"
+            disabled={busy === 'png'}
+            onClick={() => run('png', () => exportPng(project.name, data, view === 'elevation' ? wall : null))}
+          >
+            <Image size={14} /> PNG
+          </button>
+          <button className="btn" onClick={() => run('print', async () => printPdf(project.name, data))}>
+            <Printer size={14} /> Print / PDF
+          </button>
         </div>
       </header>
 
       {/* The 3D view only edits cabinet fronts, so the wall/room settings and the catalog are hidden there. */}
-      {view !== '3d' && <WallBar
-        data={data}
-        onActivate={(id) => { setData((d) => ({ ...d, activeWallId: id }), { record: false }); setSelectedId(null); }}
-        onAddIsland={() => {
-          const island = createIsland(data.room, data.walls);
-          setData((d) => ({ ...d, walls: [...d.walls, island], activeWallId: island.id }));
-          setSelectedId(null);
-        }}
-        onRename={(id, name) => setData((d) => ({ ...d, walls: d.walls.map((w) => (w.id === id ? { ...w, name } : w)) }))}
-        onDelete={(id) => {
-          setData((d) => {
-            const walls = d.walls.filter((w) => w.id !== id);
-            return { ...d, walls, activeWallId: d.activeWallId === id ? walls[0].id : d.activeWallId };
-          });
-          setSelectedId(null);
-        }}
-        onRemoveWall={(id) => {
-          setData((d) => {
-            const walls = d.walls.map((w) => (w.id === id ? { ...w, removed: true, items: [] } : w));
-            const fallback = walls.find((w) => !w.removed)!.id;
-            return { ...d, walls, activeWallId: d.activeWallId === id ? fallback : d.activeWallId };
-          });
-          setSelectedId(null);
-        }}
-        onRestoreWall={(id) => setData((d) => ({ ...d, walls: d.walls.map((w) => (w.id === id ? { ...w, removed: false } : w)), activeWallId: id }))}
-        onUpdateRoom={updateRoom}
-        onUpdateRun={(patch) => updateWall(wall.id, (w) => ({ ...w, ...patch }), `run:${wall.id}:${Object.keys(patch).join(',')}`)}
-      />}
+      {view !== '3d' && (
+        <WallBar
+          data={data}
+          onActivate={(id) => {
+            setData((d) => ({ ...d, activeWallId: id }), { record: false });
+            setSelectedId(null);
+          }}
+          onAddIsland={() => {
+            const island = createIsland(data.room, data.walls);
+            setData((d) => ({ ...d, walls: [...d.walls, island], activeWallId: island.id }));
+            setSelectedId(null);
+          }}
+          onRename={(id, name) =>
+            setData((d) => ({ ...d, walls: d.walls.map((w) => (w.id === id ? { ...w, name } : w)) }))
+          }
+          onDelete={(id) => {
+            setData((d) => {
+              const walls = d.walls.filter((w) => w.id !== id);
+              return { ...d, walls, activeWallId: d.activeWallId === id ? walls[0].id : d.activeWallId };
+            });
+            setSelectedId(null);
+          }}
+          onRemoveWall={(id) => {
+            setData((d) => {
+              const walls = d.walls.map((w) => (w.id === id ? { ...w, removed: true, items: [] } : w));
+              const fallback = walls.find((w) => !w.removed)!.id;
+              return { ...d, walls, activeWallId: d.activeWallId === id ? fallback : d.activeWallId };
+            });
+            setSelectedId(null);
+          }}
+          onRestoreWall={(id) =>
+            setData((d) => ({
+              ...d,
+              walls: d.walls.map((w) => (w.id === id ? { ...w, removed: false } : w)),
+              activeWallId: id,
+            }))
+          }
+          onUpdateRoom={updateRoom}
+          onUpdateRun={(patch) =>
+            updateWall(wall.id, (w) => ({ ...w, ...patch }), `run:${wall.id}:${Object.keys(patch).join(',')}`)
+          }
+        />
+      )}
 
       <div className="flex min-h-0 flex-1">
         {view !== '3d' && <Palette onAdd={addItem} />}
@@ -373,13 +498,18 @@ export default function App() {
             ))}
           </div>
           {view === '3d' && (
-            <Suspense fallback={<div className="flex h-full items-center justify-center text-sm text-slate-400">Loading 3D view…</div>}>
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-sm text-slate-400">Loading 3D view…</div>
+              }
+            >
               <Scene3D
                 data={data}
                 selectedId={selectedId}
                 onPick={(runId, itemId) => {
                   const item = data.walls.find((w) => w.id === runId)?.items.find((i) => i.id === itemId);
-                  if (runId && item && (item.category === 'base_cabinet' || item.category === 'upper_cabinet')) selectInPlan(runId, item.id);
+                  if (runId && item && (item.category === 'base_cabinet' || item.category === 'upper_cabinet'))
+                    selectInPlan(runId, item.id);
                   else setSelectedId(null);
                 }}
               />
@@ -399,14 +529,23 @@ export default function App() {
           )}
           {(view === 'elevation' || view === 'split') && (
             <div className="min-h-0 flex-1">
-              <Canvas wall={wall} selectedId={selectedId} onSelect={setSelectedId} onMoveItem={(id, pos) => updateItem(id, pos)} />
+              <Canvas
+                wall={wall}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onMoveItem={(id, pos) => updateItem(id, pos)}
+              />
             </div>
           )}
         </main>
         <aside className="w-80 shrink-0 overflow-y-auto border-l border-slate-300 bg-white">
           {view === '3d' ? (
             <FrontsPanel
-              item={selected && (selected.category === 'base_cabinet' || selected.category === 'upper_cabinet') ? selected : null}
+              item={
+                selected && (selected.category === 'base_cabinet' || selected.category === 'upper_cabinet')
+                  ? selected
+                  : null
+              }
               onChange={(patch) => selected && updateItem(selected.id, patch)}
             />
           ) : selected ? (
@@ -435,7 +574,9 @@ export default function App() {
         />
       )}
       {toast && (
-        <div className={`fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded px-4 py-2 text-sm text-white shadow-lg ${toast.kind === 'ok' ? 'bg-emerald-600' : 'bg-red-600'}`}>
+        <div
+          className={`fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded px-4 py-2 text-sm text-white shadow-lg ${toast.kind === 'ok' ? 'bg-emerald-600' : 'bg-red-600'}`}
+        >
           {toast.kind === 'ok' ? <FileDown size={14} /> : <AlertTriangle size={14} />}
           {toast.text}
         </div>

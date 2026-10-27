@@ -20,3 +20,5 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+.pytest_cache/
+.ruff_cache/

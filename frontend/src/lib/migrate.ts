@@ -2,7 +2,7 @@ import type { KitchenItem, ProjectData, Room, WallRun, WallSide } from '../types
 import { createRoomWalls, defaultDepth, DEFAULT_ROOM, WALL_SIDES } from './defaults';
 import { syncRoom } from './plan';
 
-type LegacyWall = Omit<WallRun, 'kind'> & Partial<Pick<WallRun, 'kind'>>;
+type LegacyWall = Omit<WallRun, 'kind' | 'items'> & Partial<Pick<WallRun, 'kind'>>;
 type LegacyItem = Omit<KitchenItem, 'depth'> & { depth?: number };
 interface LegacyData {
   room?: Room;
@@ -20,7 +20,11 @@ const withDepth = (items: LegacyItem[]): KitchenItem[] =>
  */
 export function migrateProjectData(raw: LegacyData): ProjectData {
   if (raw.room && raw.walls.every((w) => w.kind)) {
-    return syncRoom({ ...raw, room: raw.room, walls: raw.walls.map((w) => ({ ...(w as WallRun), items: withDepth(w.items) })) });
+    return syncRoom({
+      ...raw,
+      room: raw.room,
+      walls: raw.walls.map((w) => ({ ...(w as WallRun), items: withDepth(w.items) })),
+    });
   }
 
   const legacy = raw.walls;
@@ -33,7 +37,15 @@ export function migrateProjectData(raw: LegacyData): ProjectData {
   const walls: WallRun[] = WALL_SIDES.map((side: WallSide, i) => {
     const old = legacy[i];
     if (!old) return fresh[i];
-    return { ...fresh[i], id: old.id, name: old.name, countertopThicknessCm: old.countertopThicknessCm, items: withDepth(old.items), side, kind: 'wall' };
+    return {
+      ...fresh[i],
+      id: old.id,
+      name: old.name,
+      countertopThicknessCm: old.countertopThicknessCm,
+      items: withDepth(old.items),
+      side,
+      kind: 'wall',
+    };
   });
   legacy.slice(4).forEach((old, k) => {
     walls.push({

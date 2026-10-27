@@ -95,26 +95,57 @@ export function useViewport(size: { width: number; height: number }, fitKey: str
   return { svgRef, wrapRef, viewBox, zoom, fit, zoomAt, toSvg, startPan, movePan, endPan };
 }
 
-export function ZoomControls({ zoom, onZoom, onFit }: { zoom: number; onZoom: (factor: number) => void; onFit: () => void }) {
+export function ZoomControls({
+  zoom,
+  onZoom,
+  onFit,
+}: {
+  zoom: number;
+  onZoom: (factor: number) => void;
+  onFit: () => void;
+}) {
   return (
     <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded border border-slate-300 bg-white/95 p-1 shadow-sm">
-      <button className="btn border-0 px-1.5" title="Zoom out" onClick={() => onZoom(1 / 1.2)}><Minus size={14} /></button>
+      <button className="btn border-0 px-1.5" title="Zoom out" onClick={() => onZoom(1 / 1.2)}>
+        <Minus size={14} />
+      </button>
       <span className="w-12 text-center font-mono text-xs">{Math.round(zoom * 100)}%</span>
-      <button className="btn border-0 px-1.5" title="Zoom in" onClick={() => onZoom(1.2)}><Plus size={14} /></button>
-      <button className="btn border-0 px-1.5" title="Fit to screen" onClick={onFit}><Maximize size={14} /></button>
+      <button className="btn border-0 px-1.5" title="Zoom in" onClick={() => onZoom(1.2)}>
+        <Plus size={14} />
+      </button>
+      <button className="btn border-0 px-1.5" title="Fit to screen" onClick={onFit}>
+        <Maximize size={14} />
+      </button>
     </div>
   );
 }
 
 /** 10 cm / 50 cm drafting grid aligned to (originX, originY). */
-export function GridBackground({ id, cell, originX, originY }: { id: string; cell: number; originX: number; originY: number }) {
+export function GridBackground({
+  id,
+  cell,
+  originX,
+  originY,
+}: {
+  id: string;
+  cell: number;
+  originX: number;
+  originY: number;
+}) {
   return (
     <>
       <defs>
         <pattern id={`${id}Minor`} width={cell} height={cell} patternUnits="userSpaceOnUse" x={originX} y={originY}>
           <path d={`M ${cell} 0 L 0 0 0 ${cell}`} fill="none" stroke="#e2e8f0" strokeWidth={0.6} />
         </pattern>
-        <pattern id={`${id}Major`} width={cell * 5} height={cell * 5} patternUnits="userSpaceOnUse" x={originX} y={originY}>
+        <pattern
+          id={`${id}Major`}
+          width={cell * 5}
+          height={cell * 5}
+          patternUnits="userSpaceOnUse"
+          x={originX}
+          y={originY}
+        >
           <rect width={cell * 5} height={cell * 5} fill={`url(#${id}Minor)`} />
           <path d={`M ${cell * 5} 0 L 0 0 0 ${cell * 5}`} fill="none" stroke="#cbd5e1" strokeWidth={0.9} />
         </pattern>

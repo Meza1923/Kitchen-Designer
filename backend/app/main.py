@@ -87,9 +87,7 @@ def get_project(project_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 @app.put("/api/projects/{project_id}", response_model=ProjectOut, response_model_exclude_none=True)
-def update_project(
-    project_id: uuid.UUID, payload: ProjectUpdate, db: Session = Depends(get_db)
-):
+def update_project(project_id: uuid.UUID, payload: ProjectUpdate, db: Session = Depends(get_db)):
     project = get_project_or_404(db, project_id)
     if payload.name is not None:
         project.name = payload.name

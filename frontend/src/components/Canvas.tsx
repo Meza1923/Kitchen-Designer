@@ -78,7 +78,11 @@ export function Canvas({ wall, selectedId, onSelect, onMoveItem }: Props) {
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
         <span className="font-semibold text-slate-700">ELEVATION · {wall.name}</span>
         {' · '}
-        {shiftHeld ? <span className="font-semibold text-amber-600">SNAP OFF · freeform 1 cm</span> : 'snap 3 cm · Shift = freeform'}
+        {shiftHeld ? (
+          <span className="font-semibold text-amber-600">SNAP OFF · freeform 1 cm</span>
+        ) : (
+          'snap 3 cm · Shift = freeform'
+        )}
       </div>
     </div>
   );

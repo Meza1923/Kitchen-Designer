@@ -1,10 +1,48 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Copy, Lock, Plus, Trash2, Unlock, X } from 'lucide-react';
 import type { KitchenItem, TallZoneConfig, TallZoneType, WallRun } from '../types';
-import { CATEGORY_LABELS, DEPTH_PRESETS, equalSplit, makeZone, SIDE_LABELS, SOCKET_HEIGHT_PRESETS, socketName, socketWidth, TALL_ZONE_LABELS, WIDTH_PRESETS } from '../lib/defaults';
-import { boxHeight, fmt, hasCabinetFronts, hasToeKickOption, isElectrical, isWallMounted, layerOf, round1 } from '../lib/geometry';
+import {
+  CATEGORY_LABELS,
+  DEPTH_PRESETS,
+  equalSplit,
+  makeZone,
+  SIDE_LABELS,
+  SOCKET_HEIGHT_PRESETS,
+  socketName,
+  socketWidth,
+  TALL_ZONE_LABELS,
+  WIDTH_PRESETS,
+} from '../lib/defaults';
+import {
+  boxHeight,
+  fmt,
+  hasCabinetFronts,
+  hasToeKickOption,
+  isElectrical,
+  isWallMounted,
+  layerOf,
+  round1,
+} from '../lib/geometry';
 
-export function NumField({ value, onChange, min, max, step = 1, disabled, suffix = 'cm', className = '' }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; suffix?: string; className?: string }) {
+export function NumField({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  disabled,
+  suffix = 'cm',
+  className = '',
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+  suffix?: string;
+  className?: string;
+}) {
   const [draft, setDraft] = useState(String(round1(value)));
   const [focused, setFocused] = useState(false);
   useEffect(() => {
@@ -41,7 +79,11 @@ export function NumField({ value, onChange, min, max, step = 1, disabled, suffix
         }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
-      {suffix && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">{suffix}</span>}
+      {suffix && (
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+          {suffix}
+        </span>
+      )}
     </div>
   );
 }
@@ -60,7 +102,17 @@ const Field = ({ label, children }: { label: string; children: ReactNode }) => (
   </div>
 );
 
-export function Chips<T extends string | number>({ options, value, onChange, render }: { options: T[]; value: T | null; onChange: (v: T) => void; render?: (v: T) => ReactNode }) {
+export function Chips<T extends string | number>({
+  options,
+  value,
+  onChange,
+  render,
+}: {
+  options: T[];
+  value: T | null;
+  onChange: (v: T) => void;
+  render?: (v: T) => ReactNode;
+}) {
   return (
     <div className="flex flex-wrap gap-1">
       {options.map((o) => (
@@ -91,9 +143,17 @@ const DRAWER_PRESETS: { label: string; pcts: (n: number) => number[]; count?: nu
 function SumBadge({ total, onNormalize }: { total: number; onNormalize: () => void }) {
   const ok = Math.abs(total - 100) < 0.05;
   return (
-    <div className={`flex items-center justify-between rounded px-2 py-1 text-xs ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-      <span className="font-mono">Σ {fmt(total)}% {ok ? '✓' : '≠ 100%'}</span>
-      {!ok && <button className="font-semibold underline" onClick={onNormalize}>Normalize</button>}
+    <div
+      className={`flex items-center justify-between rounded px-2 py-1 text-xs ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}
+    >
+      <span className="font-mono">
+        Σ {fmt(total)}% {ok ? '✓' : '≠ 100%'}
+      </span>
+      {!ok && (
+        <button className="font-semibold underline" onClick={onNormalize}>
+          Normalize
+        </button>
+      )}
     </div>
   );
 }
@@ -105,15 +165,23 @@ function DrawerConfig({ item, onChange }: { item: KitchenItem; onChange: (p: Par
   return (
     <>
       <Field label="Number of drawers">
-        <Chips options={[1, 2, 3, 4, 5]} value={item.drawerCount} onChange={(n) => onChange({ drawerCount: n, drawerSplitPcts: equalSplit(n) })} />
+        <Chips
+          options={[1, 2, 3, 4, 5]}
+          value={item.drawerCount}
+          onChange={(n) => onChange({ drawerCount: n, drawerSplitPcts: equalSplit(n) })}
+        />
       </Field>
       <Field label="Height distribution">
         <div className="flex flex-col gap-1">
           {DRAWER_PRESETS.map((p) => (
-            <button key={p.label} className="chip text-left" onClick={() => {
-              const n = p.count ?? item.drawerCount;
-              onChange({ drawerCount: n, drawerSplitPcts: p.pcts(n) });
-            }}>
+            <button
+              key={p.label}
+              className="chip text-left"
+              onClick={() => {
+                const n = p.count ?? item.drawerCount;
+                onChange({ drawerCount: n, drawerSplitPcts: p.pcts(n) });
+              }}
+            >
               {p.label}
             </button>
           ))}
@@ -124,8 +192,23 @@ function DrawerConfig({ item, onChange }: { item: KitchenItem; onChange: (p: Par
           {pcts.map((p, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <span className="w-5 font-mono text-xs text-slate-400">#{i + 1}</span>
-              <NumField className="flex-1" value={p} suffix="%" min={1} max={100} step={0.5} onChange={(v) => setPct(i, v)} />
-              <NumField className="flex-1" value={(p / 100) * usable} min={1} max={usable} step={0.5} onChange={(v) => setPct(i, round1((v / usable) * 100))} />
+              <NumField
+                className="flex-1"
+                value={p}
+                suffix="%"
+                min={1}
+                max={100}
+                step={0.5}
+                onChange={(v) => setPct(i, v)}
+              />
+              <NumField
+                className="flex-1"
+                value={(p / 100) * usable}
+                min={1}
+                max={usable}
+                step={0.5}
+                onChange={(v) => setPct(i, round1((v / usable) * 100))}
+              />
             </div>
           ))}
           <SumBadge total={sum(pcts)} onNormalize={() => onChange({ drawerSplitPcts: normalizePcts(pcts) })} />
@@ -147,7 +230,8 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
     [next[idx], next[j]] = [next[j], next[idx]];
     set(next);
   };
-  const zoneName = (idx: number) => (idx === 0 ? 'Bottom' : idx === zones.length - 1 ? 'Top' : zones.length === 3 ? 'Middle' : `Zone ${idx + 1}`);
+  const zoneName = (idx: number) =>
+    idx === 0 ? 'Bottom' : idx === zones.length - 1 ? 'Top' : zones.length === 3 ? 'Middle' : `Zone ${idx + 1}`;
 
   // Listed top to bottom to match the drawing; the array is stored bottom to top.
   const ordered = zones.map((z, idx) => ({ z, idx })).reverse();
@@ -158,34 +242,77 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">{zoneName(idx)} zone</span>
             <div className="flex gap-0.5 text-slate-500">
-              <button title="Move up" className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, 1)}><ArrowUp size={13} /></button>
-              <button title="Move down" className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, -1)}><ArrowDown size={13} /></button>
-              <button title="Remove zone" className="rounded p-0.5 hover:bg-red-100 hover:text-red-600 disabled:opacity-30" disabled={zones.length <= 1} onClick={() => set(zones.filter((x) => x.id !== z.id))}><X size={13} /></button>
+              <button title="Move up" className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, 1)}>
+                <ArrowUp size={13} />
+              </button>
+              <button title="Move down" className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, -1)}>
+                <ArrowDown size={13} />
+              </button>
+              <button
+                title="Remove zone"
+                className="rounded p-0.5 hover:bg-red-100 hover:text-red-600 disabled:opacity-30"
+                disabled={zones.length <= 1}
+                onClick={() => set(zones.filter((x) => x.id !== z.id))}
+              >
+                <X size={13} />
+              </button>
             </div>
           </div>
-          <select className="field" value={z.type} onChange={(e) => {
-            const type = e.target.value as TallZoneType;
-            patch(z.id, { type, drawerCount: type === 'drawers' ? z.drawerCount ?? 3 : undefined });
-          }}>
-            {(Object.keys(TALL_ZONE_LABELS) as TallZoneType[]).map((t) => <option key={t} value={t}>{TALL_ZONE_LABELS[t]}</option>)}
+          <select
+            className="field"
+            value={z.type}
+            onChange={(e) => {
+              const type = e.target.value as TallZoneType;
+              patch(z.id, { type, drawerCount: type === 'drawers' ? (z.drawerCount ?? 3) : undefined });
+            }}
+          >
+            {(Object.keys(TALL_ZONE_LABELS) as TallZoneType[]).map((t) => (
+              <option key={t} value={t}>
+                {TALL_ZONE_LABELS[t]}
+              </option>
+            ))}
           </select>
           <div className="flex gap-1.5">
-            <NumField className="flex-1" value={z.heightPct} suffix="%" min={1} max={100} step={0.5} onChange={(v) => patch(z.id, { heightPct: v })} />
-            <NumField className="flex-1" value={(z.heightPct / 100) * usable} min={1} max={usable} step={0.5} onChange={(v) => patch(z.id, { heightPct: round1((v / usable) * 100) })} />
+            <NumField
+              className="flex-1"
+              value={z.heightPct}
+              suffix="%"
+              min={1}
+              max={100}
+              step={0.5}
+              onChange={(v) => patch(z.id, { heightPct: v })}
+            />
+            <NumField
+              className="flex-1"
+              value={(z.heightPct / 100) * usable}
+              min={1}
+              max={usable}
+              step={0.5}
+              onChange={(v) => patch(z.id, { heightPct: round1((v / usable) * 100) })}
+            />
           </div>
           {z.type === 'drawers' && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500">Drawers</span>
-              <Chips options={[1, 2, 3, 4, 5]} value={z.drawerCount ?? 3} onChange={(n) => patch(z.id, { drawerCount: n })} />
+              <Chips
+                options={[1, 2, 3, 4, 5]}
+                value={z.drawerCount ?? 3}
+                onChange={(n) => patch(z.id, { drawerCount: n })}
+              />
             </div>
           )}
         </div>
       ))}
-      <button className="btn w-full justify-center" onClick={() => set([...zones, makeZone('door', 20)])}><Plus size={14} /> Add zone on top</button>
-      <SumBadge total={sum(zones.map((z) => z.heightPct))} onNormalize={() => {
-        const n = normalizePcts(zones.map((z) => z.heightPct));
-        set(zones.map((z, i) => ({ ...z, heightPct: n[i] })));
-      }} />
+      <button className="btn w-full justify-center" onClick={() => set([...zones, makeZone('door', 20)])}>
+        <Plus size={14} /> Add zone on top
+      </button>
+      <SumBadge
+        total={sum(zones.map((z) => z.heightPct))}
+        onNormalize={() => {
+          const n = normalizePcts(zones.map((z) => z.heightPct));
+          set(zones.map((z, i) => ({ ...z, heightPct: n[i] })));
+        }}
+      />
     </>
   );
 }
@@ -210,8 +337,15 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
   return (
     <div>
       <div className="border-b border-slate-200 px-4 py-3">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">{CATEGORY_LABELS[item.category]}</div>
-        <input className="field mt-1.5" placeholder="Label (optional, e.g. B1)" value={item.label ?? ''} onChange={(e) => onChange({ label: e.target.value || undefined })} />
+        <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
+          {CATEGORY_LABELS[item.category]}
+        </div>
+        <input
+          className="field mt-1.5"
+          placeholder="Label (optional, e.g. B1)"
+          value={item.label ?? ''}
+          onChange={(e) => onChange({ label: e.target.value || undefined })}
+        />
       </div>
 
       <Section title="Position & Size">
@@ -231,33 +365,70 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
             <NumField value={item.x} min={0} max={maxX} onChange={(x) => onChange({ x })} />
           </Field>
           <Field label="From right wall">
-            <NumField value={fromRight} min={0} max={maxX} onChange={(v) => onChange({ x: round1(wall.widthCm - item.width - v) })} />
+            <NumField
+              value={fromRight}
+              min={0}
+              max={maxX}
+              onChange={(v) => onChange({ x: round1(wall.widthCm - item.width - v) })}
+            />
           </Field>
         </div>
-        {!isElectrical(item.category) && <Field label="Y elevation (from floor)">
-          {item.category === 'door' ? (
-            <div className="rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500">0 cm · doors stand on the floor</div>
-          ) : layer === 'upper' ? (
-            <NumField value={item.y} min={0} max={Math.max(0, wall.heightCm - item.height)} onChange={(y) => onChange({ y })} />
-          ) : layer === 'counter' ? (
-            <div className="rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500">{fmt(item.y)} cm · auto-snapped to countertop</div>
-          ) : (
-            <div className="flex gap-1.5">
-              <NumField className="flex-1" value={item.y} min={0} max={wall.heightCm - item.height} disabled={!yUnlocked} onChange={(y) => onChange({ y })} />
-              <button className="btn" title={yUnlocked ? 'Lock to floor (Y = 0)' : 'Unlock elevation'} onClick={() => {
-                if (yUnlocked) onChange({ y: 0 });
-                setYUnlocked(!yUnlocked);
-              }}>
-                {yUnlocked ? <Unlock size={14} /> : <Lock size={14} />}
-              </button>
-            </div>
-          )}
-        </Field>}
+        {!isElectrical(item.category) && (
+          <Field label="Y elevation (from floor)">
+            {item.category === 'door' ? (
+              <div className="rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500">
+                0 cm · doors stand on the floor
+              </div>
+            ) : layer === 'upper' ? (
+              <NumField
+                value={item.y}
+                min={0}
+                max={Math.max(0, wall.heightCm - item.height)}
+                onChange={(y) => onChange({ y })}
+              />
+            ) : layer === 'counter' ? (
+              <div className="rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500">
+                {fmt(item.y)} cm · auto-snapped to countertop
+              </div>
+            ) : (
+              <div className="flex gap-1.5">
+                <NumField
+                  className="flex-1"
+                  value={item.y}
+                  min={0}
+                  max={wall.heightCm - item.height}
+                  disabled={!yUnlocked}
+                  onChange={(y) => onChange({ y })}
+                />
+                <button
+                  className="btn"
+                  title={yUnlocked ? 'Lock to floor (Y = 0)' : 'Unlock elevation'}
+                  onClick={() => {
+                    if (yUnlocked) onChange({ y: 0 });
+                    setYUnlocked(!yUnlocked);
+                  }}
+                >
+                  {yUnlocked ? <Unlock size={14} /> : <Lock size={14} />}
+                </button>
+              </div>
+            )}
+          </Field>
+        )}
         {!isElectrical(item.category) && (
           <>
             <Field label="Width">
-              <Chips options={WIDTH_PRESETS} value={WIDTH_PRESETS.includes(item.width) ? item.width : null} onChange={(width) => onChange({ width })} />
-              <NumField className="mt-1.5" value={item.width} min={5} max={wall.widthCm} onChange={(width) => onChange({ width })} />
+              <Chips
+                options={WIDTH_PRESETS}
+                value={WIDTH_PRESETS.includes(item.width) ? item.width : null}
+                onChange={(width) => onChange({ width })}
+              />
+              <NumField
+                className="mt-1.5"
+                value={item.width}
+                min={5}
+                max={wall.widthCm}
+                onChange={(width) => onChange({ width })}
+              />
             </Field>
             <Field label={item.category === 'sink' ? 'Basin depth (vertical)' : 'Height'}>
               <NumField value={item.height} min={1} max={wall.heightCm} onChange={(height) => onChange({ height })} />
@@ -266,18 +437,39 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
         )}
         {!isWallMounted(item.category) && (
           <Field label="Depth from wall (plan)">
-            <Chips options={DEPTH_PRESETS} value={DEPTH_PRESETS.includes(item.depth) ? item.depth : null} onChange={(depth) => onChange({ depth })} />
-            <NumField className="mt-1.5" value={item.depth} min={5} max={150} onChange={(depth) => onChange({ depth })} />
+            <Chips
+              options={DEPTH_PRESETS}
+              value={DEPTH_PRESETS.includes(item.depth) ? item.depth : null}
+              onChange={(depth) => onChange({ depth })}
+            />
+            <NumField
+              className="mt-1.5"
+              value={item.depth}
+              min={5}
+              max={150}
+              onChange={(depth) => onChange({ depth })}
+            />
           </Field>
         )}
         {hasToeKickOption(item.category) && (
           <Field label="Toe-kick (plinth)">
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-1.5 text-sm">
-                <input type="checkbox" checked={item.hasToeKick} onChange={(e) => onChange({ hasToeKick: e.target.checked })} />
+                <input
+                  type="checkbox"
+                  checked={item.hasToeKick}
+                  onChange={(e) => onChange({ hasToeKick: e.target.checked })}
+                />
                 Enabled
               </label>
-              <NumField className="flex-1" value={item.toeKickHeight} min={1} max={item.height - 5} disabled={!item.hasToeKick} onChange={(toeKickHeight) => onChange({ toeKickHeight })} />
+              <NumField
+                className="flex-1"
+                value={item.toeKickHeight}
+                min={1}
+                max={item.height - 5}
+                disabled={!item.hasToeKick}
+                onChange={(toeKickHeight) => onChange({ toeKickHeight })}
+              />
             </div>
           </Field>
         )}
@@ -285,10 +477,20 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
 
       {hasCabinetFronts(item.category) && (
         <Section title="Cabinet Fronts">
-          <Chips options={['doors', 'drawers'] as ('doors' | 'drawers')[]} value={item.frontType} onChange={(frontType) => onChange({ frontType })} render={(v) => (v === 'doors' ? 'Doors' : 'Drawers')} />
+          <Chips
+            options={['doors', 'drawers'] as ('doors' | 'drawers')[]}
+            value={item.frontType}
+            onChange={(frontType) => onChange({ frontType })}
+            render={(v) => (v === 'doors' ? 'Doors' : 'Drawers')}
+          />
           {item.frontType === 'doors' ? (
             <Field label="Doors">
-              <Chips options={[1, 2] as (1 | 2)[]} value={item.doorCount} onChange={(doorCount) => onChange({ doorCount })} render={(n) => `${n} Door${n > 1 ? 's' : ''}`} />
+              <Chips
+                options={[1, 2] as (1 | 2)[]}
+                value={item.doorCount}
+                onChange={(doorCount) => onChange({ doorCount })}
+                render={(n) => `${n} Door${n > 1 ? 's' : ''}`}
+              />
             </Field>
           ) : (
             <DrawerConfig item={item} onChange={onChange} />
@@ -305,10 +507,19 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
       {item.category === 'sink' && (
         <Section title="Sink">
           <Field label="Bowls">
-            <Chips options={[1, 2] as (1 | 2)[]} value={item.sinkBowls ?? 1} onChange={(sinkBowls) => onChange({ sinkBowls })} render={(n) => `${n} Bowl${n > 1 ? 's' : ''}`} />
+            <Chips
+              options={[1, 2] as (1 | 2)[]}
+              value={item.sinkBowls ?? 1}
+              onChange={(sinkBowls) => onChange({ sinkBowls })}
+              render={(n) => `${n} Bowl${n > 1 ? 's' : ''}`}
+            />
           </Field>
           <label className="flex items-center gap-1.5 text-sm">
-            <input type="checkbox" checked={item.hasFaucet ?? true} onChange={(e) => onChange({ hasFaucet: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={item.hasFaucet ?? true}
+              onChange={(e) => onChange({ hasFaucet: e.target.checked })}
+            />
             Show faucet
           </label>
         </Section>
@@ -332,19 +543,37 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
               value={SOCKET_HEIGHT_PRESETS.find((h) => Math.abs(h - (item.y + item.height / 2)) < 0.05) ?? null}
               onChange={(c) => onChange({ y: round1(c - item.height / 2) })}
             />
-            <NumField className="mt-1.5" value={item.y + item.height / 2} min={item.height / 2} max={wall.heightCm - item.height / 2} onChange={(c) => onChange({ y: round1(c - item.height / 2) })} />
+            <NumField
+              className="mt-1.5"
+              value={item.y + item.height / 2}
+              min={item.height / 2}
+              max={wall.heightCm - item.height / 2}
+              onChange={(c) => onChange({ y: round1(c - item.height / 2) })}
+            />
           </Field>
-          <p className="font-mono text-[11px] text-slate-400">{socketName(item)} · plate {fmt(item.width)} × {fmt(item.height)} cm</p>
+          <p className="font-mono text-[11px] text-slate-400">
+            {socketName(item)} · plate {fmt(item.width)} × {fmt(item.height)} cm
+          </p>
         </Section>
       )}
 
       {item.category === 'door' && (
         <Section title="Door">
           <Field label="Hinge side (seen from inside the room)">
-            <Chips options={['left', 'right'] as ('left' | 'right')[]} value={item.doorHinge ?? 'left'} onChange={(doorHinge) => onChange({ doorHinge })} render={(v) => (v === 'left' ? 'Left' : 'Right')} />
+            <Chips
+              options={['left', 'right'] as ('left' | 'right')[]}
+              value={item.doorHinge ?? 'left'}
+              onChange={(doorHinge) => onChange({ doorHinge })}
+              render={(v) => (v === 'left' ? 'Left' : 'Right')}
+            />
           </Field>
           <Field label="Opens">
-            <Chips options={['in', 'out'] as ('in' | 'out')[]} value={item.doorSwing ?? 'in'} onChange={(doorSwing) => onChange({ doorSwing })} render={(v) => (v === 'in' ? 'Into the room' : 'Out of the room')} />
+            <Chips
+              options={['in', 'out'] as ('in' | 'out')[]}
+              value={item.doorSwing ?? 'in'}
+              onChange={(doorSwing) => onChange({ doorSwing })}
+              render={(v) => (v === 'in' ? 'Into the room' : 'Out of the room')}
+            />
           </Field>
         </Section>
       )}
@@ -352,15 +581,23 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
       {item.category === 'stove' && (
         <Section title="Cooktop">
           <Field label="Burners">
-            <Chips options={[4, 5] as (4 | 5)[]} value={item.burnerCount ?? 4} onChange={(burnerCount) => onChange({ burnerCount })} />
+            <Chips
+              options={[4, 5] as (4 | 5)[]}
+              value={item.burnerCount ?? 4}
+              onChange={(burnerCount) => onChange({ burnerCount })}
+            />
           </Field>
         </Section>
       )}
 
       <Section title="Actions">
         <div className="flex gap-2">
-          <button className="btn flex-1 justify-center" onClick={onDuplicate}><Copy size={14} /> Duplicate</button>
-          <button className="btn flex-1 justify-center border-red-300 text-red-600 hover:bg-red-50" onClick={onDelete}><Trash2 size={14} /> Delete</button>
+          <button className="btn flex-1 justify-center" onClick={onDuplicate}>
+            <Copy size={14} /> Duplicate
+          </button>
+          <button className="btn flex-1 justify-center border-red-300 text-red-600 hover:bg-red-50" onClick={onDelete}>
+            <Trash2 size={14} /> Delete
+          </button>
         </div>
         <p className="text-[11px] text-slate-400">Del / Backspace deletes · Arrow keys nudge 1 cm (Shift = 10 cm)</p>
       </Section>

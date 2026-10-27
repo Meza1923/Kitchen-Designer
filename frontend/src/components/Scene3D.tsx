@@ -98,10 +98,15 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
     const onUp = (e: PointerEvent) => {
       if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
       const rect = renderer.domElement.getBoundingClientRect();
-      const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
       raycaster.setFromCamera(ndc, camera);
       const model = ctx.current?.model;
-      const hit = model ? raycaster.intersectObjects(model.children, true).find((h) => h.object.visible && isVisible(h.object)) : undefined;
+      const hit = model
+        ? raycaster.intersectObjects(model.children, true).find((h) => h.object.visible && isVisible(h.object))
+        : undefined;
       const ud = hit?.object.userData ?? {};
       onPickRef.current(ud.runId ?? null, ud.itemId ?? null);
     };
@@ -142,11 +147,16 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
   return (
     <div className="relative h-full w-full overflow-hidden">
       <div ref={wrapRef} className="h-full w-full" data-testid="scene3d" />
-      <button className="btn absolute bottom-3 right-3 bg-white/95 shadow-sm" title="Reset view" onClick={() => ctx.current?.resetView()}>
+      <button
+        className="btn absolute bottom-3 right-3 bg-white/95 shadow-sm"
+        title="Reset view"
+        onClick={() => ctx.current?.resetView()}
+      >
         <Maximize size={14} /> Reset view
       </button>
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
-        <span className="font-semibold text-slate-700">3D</span> · drag to orbit · right-drag to pan · scroll to zoom · click a cabinet to change its fronts
+        <span className="font-semibold text-slate-700">3D</span> · drag to orbit · right-drag to pan · scroll to zoom ·
+        click a cabinet to change its fronts
       </div>
     </div>
   );

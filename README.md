@@ -1,6 +1,6 @@
 # Kitchen Designer
 
-Schematic kitchen planner with a top-down plan view, per-wall elevations and an orbit 3D view (spec: `.CLAUDE`).
+Schematic kitchen planner with a top-down plan view, per-wall elevations and an orbit 3D view (spec: `CLAUDE.md`).
 
 ## Quick start (Windows, macOS, Linux)
 
@@ -57,6 +57,32 @@ cd frontend && npm install && npm run dev
 Live reload works inside the containers: Vite and uvicorn poll for file changes (`VITE_USE_POLLING`, `WATCHFILES_FORCE_POLLING` in `docker-compose.yml`), because file events don't cross Docker/Podman bind mounts on macOS and Windows.
 
 Podman on macOS: if Docker reports `failed to connect to the docker API at unix:///var/run/docker.sock`, the Podman VM's network proxy has died. Restart it with `podman machine stop && podman machine start`.
+
+## Tests and checks
+
+```bash
+# backend (one-time: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt)
+cd backend
+.venv/bin/pytest            # API tests on in-memory SQLite
+.venv/bin/ruff check .      # lint
+.venv/bin/ruff format .     # format
+
+# frontend
+cd frontend
+npm test                    # Vitest: geometry, plan mapping, migration
+npm run typecheck           # tsc, including the frontend/backend schema check
+npm run lint                # ESLint
+npm run format              # Prettier
+```
+
+**Changing the data model:** the types in `frontend/src/types.ts` must match `backend/app/schemas.py`. After editing the Pydantic schemas, regenerate the frontend's copy of the API schema:
+
+```bash
+cd backend && .venv/bin/python -m app.export_openapi ../frontend/src/generated/openapi.json
+cd ../frontend && npm run gen:api
+```
+
+`npm run typecheck` then fails if a field or enum value exists on only one side (`frontend/src/lib/schemaSync.ts`), and `pytest` fails if the generated schema is stale.
 
 ## Layout
 

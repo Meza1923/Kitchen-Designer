@@ -1,7 +1,16 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import { SIDE_LABELS } from '../lib/defaults';
-import { computeGaps, computeOverlaps, computeSocketIssues, computeUnsupported, fmt, isElectrical, isOpening, layerOf } from '../lib/geometry';
+import {
+  computeGaps,
+  computeOverlaps,
+  computeSocketIssues,
+  computeUnsupported,
+  fmt,
+  isElectrical,
+  isOpening,
+  layerOf,
+} from '../lib/geometry';
 import {
   computePlanConflicts,
   countertopRects,
@@ -57,7 +66,14 @@ export interface PlanDrawingProps {
   onRunPointerDown?: (e: ReactPointerEvent, run: WallRun) => void;
 }
 
-export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPointerDown, onRunPointerDown }: PlanDrawingProps) {
+export function PlanDrawing({
+  data,
+  scale: S,
+  selectedId,
+  interactive,
+  onItemPointerDown,
+  onRunPointerDown,
+}: PlanDrawingProps) {
   const { room } = data;
   const W = room.widthCm * S;
   const D = room.depthCm * S;
@@ -84,7 +100,11 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
   const openingRect = (f: Frame, item: KitchenItem) => localRect(f, item.x, item.x + item.width, -T, 0);
   /** Footprint used for highlighting: openings sit in the wall, sockets on its face, everything else in the room. */
   const footprint = (f: Frame, item: KitchenItem) =>
-    isOpening(item.category) ? openingRect(f, item) : isElectrical(item.category) ? localRect(f, item.x, item.x + item.width, 0, 4) : itemPlanRect(f, item);
+    isOpening(item.category)
+      ? openingRect(f, item)
+      : isElectrical(item.category)
+        ? localRect(f, item.x, item.x + item.width, 0, 4)
+        : itemPlanRect(f, item);
 
   const itemProps = (run: WallRun, item: KitchenItem) => ({
     'data-item-id': item.id,
@@ -95,7 +115,15 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
   const text = (r: Rect, label: string, size = 9, weight = 600) => {
     const vertical = r.h > r.w * 1.2;
     return (
-      <Label x={(r.x + r.w / 2) * S} y={(r.y + r.h / 2) * S} text={label} size={size} fill={INK} weight={weight} rotate={vertical ? -90 : undefined} />
+      <Label
+        x={(r.x + r.w / 2) * S}
+        y={(r.y + r.h / 2) * S}
+        text={label}
+        size={size}
+        fill={INK}
+        weight={weight}
+        rotate={vertical ? -90 : undefined}
+      />
     );
   };
 
@@ -114,9 +142,13 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
         return <circle cx={c.x * S} cy={c.y * S} r={Math.min(item.width, item.depth) * 0.32 * S} {...LINE} />;
       }
       case 'under_counter_oven':
-        return <rect {...px(localRect(f, item.x + 5, item.x + item.width - 5, item.depth - 8, item.depth - 3))} {...LINE} />;
+        return (
+          <rect {...px(localRect(f, item.x + 5, item.x + item.width - 5, item.depth - 8, item.depth - 3))} {...LINE} />
+        );
       case 'fridge':
-        return <rect {...px(localRect(f, item.x + 3, item.x + item.width - 3, item.depth - 6, item.depth - 2))} {...LINE} />;
+        return (
+          <rect {...px(localRect(f, item.x + 3, item.x + item.width - 3, item.depth - 6, item.depth - 2))} {...LINE} />
+        );
       default:
         return null;
     }
@@ -133,9 +165,20 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
         <g>
           {Array.from({ length: bowls }, (_, i) => {
             const x0 = item.x + inset + i * (bw + divider);
-            return <rect key={i} {...px(localRect(f, x0, x0 + bw, 9, Math.max(12, item.depth - 3)))} rx={4} fill="#f1f5f9" stroke={INK} strokeWidth={1.25} />;
+            return (
+              <rect
+                key={i}
+                {...px(localRect(f, x0, x0 + bw, 9, Math.max(12, item.depth - 3)))}
+                rx={4}
+                fill="#f1f5f9"
+                stroke={INK}
+                strokeWidth={1.25}
+              />
+            );
           })}
-          {item.hasFaucet && <circle cx={faucet.x * S} cy={faucet.y * S} r={2 * S} fill="#ffffff" stroke={INK} strokeWidth={1.25} />}
+          {item.hasFaucet && (
+            <circle cx={faucet.x * S} cy={faucet.y * S} r={2 * S} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
+          )}
         </g>
       );
     }
@@ -145,7 +188,14 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
       return (
         <g>
           <rect {...px(body)} rx={3} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
-          <circle cx={c.x * S} cy={c.y * S} r={Math.min(item.width, item.depth) * 0.16 * S} fill={item.category === 'water_bar' ? '#e0f2fe' : '#ffffff'} stroke={INK} strokeWidth={1} />
+          <circle
+            cx={c.x * S}
+            cy={c.y * S}
+            r={Math.min(item.width, item.depth) * 0.16 * S}
+            fill={item.category === 'water_bar' ? '#e0f2fe' : '#ffffff'}
+            stroke={INK}
+            strokeWidth={1}
+          />
           {text(body, SHORT[item.category], 7)}
         </g>
       );
@@ -155,12 +205,28 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
       const d = item.depth;
       const spots =
         n === 5
-          ? [[0.2, 0.32], [0.8, 0.32], [0.2, 0.74], [0.8, 0.74], [0.5, 0.53]]
-          : [[0.28, 0.32], [0.72, 0.32], [0.28, 0.74], [0.72, 0.74]];
+          ? [
+              [0.2, 0.32],
+              [0.8, 0.32],
+              [0.2, 0.74],
+              [0.8, 0.74],
+              [0.5, 0.53],
+            ]
+          : [
+              [0.28, 0.32],
+              [0.72, 0.32],
+              [0.28, 0.74],
+              [0.72, 0.74],
+            ];
       const r = Math.min(item.width, d) * (n === 5 ? 0.11 : 0.14) * S;
       return (
         <g>
-          <rect {...px(localRect(f, item.x + 2, item.x + item.width - 2, 4, d - 2))} fill="#ffffff" stroke={INK} strokeWidth={1.5} />
+          <rect
+            {...px(localRect(f, item.x + 2, item.x + item.width - 2, 4, d - 2))}
+            fill="#ffffff"
+            stroke={INK}
+            strokeWidth={1.5}
+          />
           {spots.map(([a, b], i) => {
             const c = toPlan(f, item.x + item.width * a, d * b);
             return (
@@ -196,141 +262,268 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
 
       <g transform={`translate(${planOrigin(S)} ${planOrigin(S)})`}>
         {/* Walls and floor */}
-        {wallBands.map((b, i) => <rect key={i} {...b} fill="url(#planWallHatch)" stroke={INK} strokeWidth={1.75} />)}
+        {wallBands.map((b, i) => (
+          <rect key={i} {...b} fill="url(#planWallHatch)" stroke={INK} strokeWidth={1.75} />
+        ))}
 
         {/* Island footprints */}
-        {runs.filter(({ run }) => run.kind === 'island').map(({ run }) => {
-          const r = islandRect(run);
-          const isActive = run.id === active;
-          return (
-            <g key={run.id} data-run-id={run.id} style={interactive ? { cursor: 'move' } : undefined} onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined}>
-              <rect {...px(r)} fill="#f8fafc" stroke={isActive ? SELECT : THIN} strokeWidth={isActive ? 2 : 1} strokeDasharray="6 4" />
-              <Label x={(r.x + r.w / 2) * S} y={(r.y + r.h) * S + 10} text={`${run.name.toUpperCase()} ${fmt(run.widthCm)}×${fmt(run.depthCm ?? 90)}`} size={8} fill={isActive ? SELECT : THIN} weight={600} />
-            </g>
-          );
-        })}
+        {runs
+          .filter(({ run }) => run.kind === 'island')
+          .map(({ run }) => {
+            const r = islandRect(run);
+            const isActive = run.id === active;
+            return (
+              <g
+                key={run.id}
+                data-run-id={run.id}
+                style={interactive ? { cursor: 'move' } : undefined}
+                onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined}
+              >
+                <rect
+                  {...px(r)}
+                  fill="#f8fafc"
+                  stroke={isActive ? SELECT : THIN}
+                  strokeWidth={isActive ? 2 : 1}
+                  strokeDasharray="6 4"
+                />
+                <Label
+                  x={(r.x + r.w / 2) * S}
+                  y={(r.y + r.h) * S + 10}
+                  text={`${run.name.toUpperCase()} ${fmt(run.widthCm)}×${fmt(run.depthCm ?? 90)}`}
+                  size={8}
+                  fill={isActive ? SELECT : THIN}
+                  weight={600}
+                />
+              </g>
+            );
+          })}
 
         {/* Floor-standing units */}
         {runs.flatMap(({ run, f }) =>
-          run.items.filter((i) => layerOf(i.category) === 'floor').map((item) => {
-            const r = itemPlanRect(f, item);
-            return (
-              <g key={item.id} {...itemProps(run, item)}>
-                <rect {...px(r)} fill={item.category === 'corner_blocker' ? 'url(#planHatch)' : '#ffffff'} stroke={INK} strokeWidth={1.5} />
-                {floorSymbol(f, item, r)}
-                {text(r, `${SHORT[item.category]} ${fmt(item.width)}`, 8.5)}
-              </g>
-            );
-          }),
+          run.items
+            .filter((i) => layerOf(i.category) === 'floor')
+            .map((item) => {
+              const r = itemPlanRect(f, item);
+              return (
+                <g key={item.id} {...itemProps(run, item)}>
+                  <rect
+                    {...px(r)}
+                    fill={item.category === 'corner_blocker' ? 'url(#planHatch)' : '#ffffff'}
+                    stroke={INK}
+                    strokeWidth={1.5}
+                  />
+                  {floorSymbol(f, item, r)}
+                  {text(r, `${SHORT[item.category]} ${fmt(item.width)}`, 8.5)}
+                </g>
+              );
+            }),
         )}
 
         {/* Countertops */}
         {runs.flatMap(({ run, f }) =>
           countertopRects(f, run).map((r, i) => (
-            <rect key={`${run.id}-ct-${i}`} {...px(r)} fill="#94a3b8" fillOpacity={0.18} stroke={INK} strokeWidth={1} style={{ pointerEvents: 'none' }} />
+            <rect
+              key={`${run.id}-ct-${i}`}
+              {...px(r)}
+              fill="#94a3b8"
+              fillOpacity={0.18}
+              stroke={INK}
+              strokeWidth={1}
+              style={{ pointerEvents: 'none' }}
+            />
           )),
         )}
 
         {/* Sink / cooktop on the counter */}
         {runs.flatMap(({ run, f }) =>
-          run.items.filter((i) => layerOf(i.category) === 'counter').map((item) => (
-            <g key={item.id} {...itemProps(run, item)}>
-              <rect {...px(itemPlanRect(f, item))} fill="transparent" />
-              {counterSymbol(f, item)}
-            </g>
-          )),
+          run.items
+            .filter((i) => layerOf(i.category) === 'counter')
+            .map((item) => (
+              <g key={item.id} {...itemProps(run, item)}>
+                <rect {...px(itemPlanRect(f, item))} fill="transparent" />
+                {counterSymbol(f, item)}
+              </g>
+            )),
         )}
 
         {/* Upper cabinets: dashed (above the cut plane) */}
         {runs.flatMap(({ run, f }) =>
-          run.items.filter((i) => i.category === 'upper_cabinet').map((item) => {
-            const r = itemPlanRect(f, item);
-            return (
-              <g key={item.id} {...itemProps(run, item)}>
-                <rect {...px(r)} fill="#eff6ff" fillOpacity={0.35} stroke={INK} strokeWidth={1.25} strokeDasharray="7 4" />
-                <line {...{ x1: r.x * S, y1: r.y * S, x2: (r.x + r.w) * S, y2: (r.y + r.h) * S }} stroke={THIN} strokeWidth={0.75} strokeDasharray="4 4" />
-              </g>
-            );
-          }),
+          run.items
+            .filter((i) => i.category === 'upper_cabinet')
+            .map((item) => {
+              const r = itemPlanRect(f, item);
+              return (
+                <g key={item.id} {...itemProps(run, item)}>
+                  <rect
+                    {...px(r)}
+                    fill="#eff6ff"
+                    fillOpacity={0.35}
+                    stroke={INK}
+                    strokeWidth={1.25}
+                    strokeDasharray="7 4"
+                  />
+                  <line
+                    {...{ x1: r.x * S, y1: r.y * S, x2: (r.x + r.w) * S, y2: (r.y + r.h) * S }}
+                    stroke={THIN}
+                    strokeWidth={0.75}
+                    strokeDasharray="4 4"
+                  />
+                </g>
+              );
+            }),
         )}
 
         {/* Wall hit areas, labels and windows */}
-        {runs.filter(({ run }) => run.kind === 'wall' && run.removed).map(({ run, f }) => {
-          const a = toPlan(f, 0, 0);
-          const b = toPlan(f, f.length, 0);
-          const lp = toPlan(f, f.length / 2, -T - 7);
-          const vertical = run.side === 'east' || run.side === 'west';
-          return (
-            <g key={run.id} style={{ pointerEvents: 'none' }}>
-              <line x1={a.x * S} y1={a.y * S} x2={b.x * S} y2={b.y * S} stroke={THIN} strokeWidth={1} strokeDasharray="10 4 2 4" />
-              <Label x={lp.x * S} y={lp.y * S} text={`OPEN · ${run.name.toUpperCase()}`} size={8.5} fill="#94a3b8" weight={700} rotate={vertical ? (run.side === 'east' ? 90 : -90) : undefined} />
-            </g>
-          );
-        })}
-        {runs.filter(({ run }) => run.kind === 'wall' && !run.removed).map(({ run, f }) => {
-          const band = localRect(f, 0, f.length, -T, 0);
-          const isActive = run.id === active;
-          const inner = [toPlan(f, 0, 0), toPlan(f, f.length, 0)];
-          const lp = toPlan(f, f.length / 2, -T - 7);
-          const vertical = run.side === 'east' || run.side === 'west';
-          return (
-            <g key={run.id} data-run-id={run.id} onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined} style={interactive ? { cursor: 'pointer' } : undefined}>
-              <rect {...px(band)} fill="transparent" />
-              {isActive && <line x1={inner[0].x * S} y1={inner[0].y * S} x2={inner[1].x * S} y2={inner[1].y * S} stroke={SELECT} strokeWidth={4} strokeOpacity={0.6} />}
-              <Label
-                x={lp.x * S}
-                y={lp.y * S}
-                text={`${run.name.toUpperCase()} · ${SIDE_LABELS[run.side ?? 'north'].toUpperCase()}`}
-                size={9}
-                weight={700}
-                fill={isActive ? SELECT : THIN}
-                rotate={vertical ? (run.side === 'east' ? 90 : -90) : undefined}
-              />
-              {run.items.filter((i) => isElectrical(i.category)).map((item) => {
-                const power = item.category === 'power_socket';
-                const lbl = toPlan(f, item.x + item.width / 2, 9);
-                return (
-                  <g key={item.id} {...itemProps(run, item)}>
-                    <rect {...px(localRect(f, item.x, item.x + item.width, 0, 4))} fill={power ? '#b91c1c' : '#ffffff'} stroke={INK} strokeWidth={1.25} />
-                    <Label x={lbl.x * S} y={lbl.y * S} text={power ? '16A' : `S${item.socketCount ?? 1}`} size={7} fill={power ? '#b91c1c' : INK} weight={700} />
-                  </g>
-                );
-              })}
-              {run.items.filter((i) => i.category === 'door').map((item) => {
-                const hingeX = item.doorHinge === 'right' ? item.x + item.width : item.x;
-                const freeX = item.doorHinge === 'right' ? item.x : item.x + item.width;
-                const out = item.doorSwing === 'out';
-                const base = out ? -T : 0; // the leaf hangs on the face it opens towards
-                const dir = out ? -1 : 1;
-                const hinge = toPlan(f, hingeX, base);
-                const leafEnd = toPlan(f, hingeX, base + dir * item.width);
-                const arc = Array.from({ length: 17 }, (_, k) => {
-                  const a = (k / 16) * (Math.PI / 2);
-                  const p = toPlan(f, hingeX + (freeX - hingeX) * Math.sin(a), base + dir * item.width * Math.cos(a));
-                  return `${p.x * S},${p.y * S}`;
-                }).join(' ');
-                return (
-                  <g key={item.id} {...itemProps(run, item)}>
-                    <rect {...px(openingRect(f, item))} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
-                    <polyline points={arc} fill="none" stroke={THIN} strokeWidth={0.9} strokeDasharray="4 3" />
-                    <line x1={hinge.x * S} y1={hinge.y * S} x2={leafEnd.x * S} y2={leafEnd.y * S} stroke={INK} strokeWidth={2.5} />
-                  </g>
-                );
-              })}
-              {run.items.filter((i) => i.category === 'window').map((item) => {
-                const r = localRect(f, item.x, item.x + item.width, -T, 0);
-                const g1 = [toPlan(f, item.x, -T / 3), toPlan(f, item.x + item.width, -T / 3)];
-                const g2 = [toPlan(f, item.x, (-2 * T) / 3), toPlan(f, item.x + item.width, (-2 * T) / 3)];
-                return (
-                  <g key={item.id} {...itemProps(run, item)}>
-                    <rect {...px(r)} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
-                    {[g1, g2].map((g, i) => <line key={i} x1={g[0].x * S} y1={g[0].y * S} x2={g[1].x * S} y2={g[1].y * S} stroke={INK} strokeWidth={0.9} />)}
-                  </g>
-                );
-              })}
-            </g>
-          );
-        })}
+        {runs
+          .filter(({ run }) => run.kind === 'wall' && run.removed)
+          .map(({ run, f }) => {
+            const a = toPlan(f, 0, 0);
+            const b = toPlan(f, f.length, 0);
+            const lp = toPlan(f, f.length / 2, -T - 7);
+            const vertical = run.side === 'east' || run.side === 'west';
+            return (
+              <g key={run.id} style={{ pointerEvents: 'none' }}>
+                <line
+                  x1={a.x * S}
+                  y1={a.y * S}
+                  x2={b.x * S}
+                  y2={b.y * S}
+                  stroke={THIN}
+                  strokeWidth={1}
+                  strokeDasharray="10 4 2 4"
+                />
+                <Label
+                  x={lp.x * S}
+                  y={lp.y * S}
+                  text={`OPEN · ${run.name.toUpperCase()}`}
+                  size={8.5}
+                  fill="#94a3b8"
+                  weight={700}
+                  rotate={vertical ? (run.side === 'east' ? 90 : -90) : undefined}
+                />
+              </g>
+            );
+          })}
+        {runs
+          .filter(({ run }) => run.kind === 'wall' && !run.removed)
+          .map(({ run, f }) => {
+            const band = localRect(f, 0, f.length, -T, 0);
+            const isActive = run.id === active;
+            const inner = [toPlan(f, 0, 0), toPlan(f, f.length, 0)];
+            const lp = toPlan(f, f.length / 2, -T - 7);
+            const vertical = run.side === 'east' || run.side === 'west';
+            return (
+              <g
+                key={run.id}
+                data-run-id={run.id}
+                onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined}
+                style={interactive ? { cursor: 'pointer' } : undefined}
+              >
+                <rect {...px(band)} fill="transparent" />
+                {isActive && (
+                  <line
+                    x1={inner[0].x * S}
+                    y1={inner[0].y * S}
+                    x2={inner[1].x * S}
+                    y2={inner[1].y * S}
+                    stroke={SELECT}
+                    strokeWidth={4}
+                    strokeOpacity={0.6}
+                  />
+                )}
+                <Label
+                  x={lp.x * S}
+                  y={lp.y * S}
+                  text={`${run.name.toUpperCase()} · ${SIDE_LABELS[run.side ?? 'north'].toUpperCase()}`}
+                  size={9}
+                  weight={700}
+                  fill={isActive ? SELECT : THIN}
+                  rotate={vertical ? (run.side === 'east' ? 90 : -90) : undefined}
+                />
+                {run.items
+                  .filter((i) => isElectrical(i.category))
+                  .map((item) => {
+                    const power = item.category === 'power_socket';
+                    const lbl = toPlan(f, item.x + item.width / 2, 9);
+                    return (
+                      <g key={item.id} {...itemProps(run, item)}>
+                        <rect
+                          {...px(localRect(f, item.x, item.x + item.width, 0, 4))}
+                          fill={power ? '#b91c1c' : '#ffffff'}
+                          stroke={INK}
+                          strokeWidth={1.25}
+                        />
+                        <Label
+                          x={lbl.x * S}
+                          y={lbl.y * S}
+                          text={power ? '16A' : `S${item.socketCount ?? 1}`}
+                          size={7}
+                          fill={power ? '#b91c1c' : INK}
+                          weight={700}
+                        />
+                      </g>
+                    );
+                  })}
+                {run.items
+                  .filter((i) => i.category === 'door')
+                  .map((item) => {
+                    const hingeX = item.doorHinge === 'right' ? item.x + item.width : item.x;
+                    const freeX = item.doorHinge === 'right' ? item.x : item.x + item.width;
+                    const out = item.doorSwing === 'out';
+                    const base = out ? -T : 0; // the leaf hangs on the face it opens towards
+                    const dir = out ? -1 : 1;
+                    const hinge = toPlan(f, hingeX, base);
+                    const leafEnd = toPlan(f, hingeX, base + dir * item.width);
+                    const arc = Array.from({ length: 17 }, (_, k) => {
+                      const a = (k / 16) * (Math.PI / 2);
+                      const p = toPlan(
+                        f,
+                        hingeX + (freeX - hingeX) * Math.sin(a),
+                        base + dir * item.width * Math.cos(a),
+                      );
+                      return `${p.x * S},${p.y * S}`;
+                    }).join(' ');
+                    return (
+                      <g key={item.id} {...itemProps(run, item)}>
+                        <rect {...px(openingRect(f, item))} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
+                        <polyline points={arc} fill="none" stroke={THIN} strokeWidth={0.9} strokeDasharray="4 3" />
+                        <line
+                          x1={hinge.x * S}
+                          y1={hinge.y * S}
+                          x2={leafEnd.x * S}
+                          y2={leafEnd.y * S}
+                          stroke={INK}
+                          strokeWidth={2.5}
+                        />
+                      </g>
+                    );
+                  })}
+                {run.items
+                  .filter((i) => i.category === 'window')
+                  .map((item) => {
+                    const r = localRect(f, item.x, item.x + item.width, -T, 0);
+                    const g1 = [toPlan(f, item.x, -T / 3), toPlan(f, item.x + item.width, -T / 3)];
+                    const g2 = [toPlan(f, item.x, (-2 * T) / 3), toPlan(f, item.x + item.width, (-2 * T) / 3)];
+                    return (
+                      <g key={item.id} {...itemProps(run, item)}>
+                        <rect {...px(r)} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
+                        {[g1, g2].map((g, i) => (
+                          <line
+                            key={i}
+                            x1={g[0].x * S}
+                            y1={g[0].y * S}
+                            x2={g[1].x * S}
+                            y2={g[1].y * S}
+                            stroke={INK}
+                            strokeWidth={0.9}
+                          />
+                        ))}
+                      </g>
+                    );
+                  })}
+              </g>
+            );
+          })}
 
         {/* Validation: <10cm gaps, same-run overlaps and cross-run clashes */}
         {runs.flatMap(({ run, f }) =>
@@ -350,27 +543,62 @@ export function PlanDrawing({ data, scale: S, selectedId, interactive, onItemPoi
           ),
         )}
         {runs.flatMap(({ f, run }) =>
-          run.items.filter((i) => flagged.has(i.id)).map((item) => {
-            const r = footprint(f, item);
-            return <rect key={`flag-${item.id}`} x={r.x * S - 2} y={r.y * S - 2} width={r.w * S + 4} height={r.h * S + 4} fill="none" stroke={WARN} strokeWidth={2} strokeDasharray="6 3" style={{ pointerEvents: 'none' }} />;
-          }),
+          run.items
+            .filter((i) => flagged.has(i.id))
+            .map((item) => {
+              const r = footprint(f, item);
+              return (
+                <rect
+                  key={`flag-${item.id}`}
+                  x={r.x * S - 2}
+                  y={r.y * S - 2}
+                  width={r.w * S + 4}
+                  height={r.h * S + 4}
+                  fill="none"
+                  stroke={WARN}
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  style={{ pointerEvents: 'none' }}
+                />
+              );
+            }),
         )}
         {conflicts.map((c, i) => (
           <g key={`conf-${i}`} style={{ pointerEvents: 'none' }}>
-            {c.kind === 'outside' && <rect {...px(c.rect)} fill="none" stroke={WARN} strokeWidth={2} strokeDasharray="6 3" />}
+            {c.kind === 'outside' && (
+              <rect {...px(c.rect)} fill="none" stroke={WARN} strokeWidth={2} strokeDasharray="6 3" />
+            )}
             {c.kind === 'clash' && <rect {...px(c.rect)} fill="url(#planWarnHatch)" fillOpacity={0.8} />}
             {c.kind === 'swing' && <rect {...px(c.rect)} fill="url(#planWarnHatch)" fillOpacity={0.6} />}
-            <Badge x={(c.rect.x + c.rect.w / 2) * S} y={(c.rect.y + c.rect.h / 2) * S} text={{ clash: 'CLASH', outside: 'OUTSIDE ROOM', swing: 'DOOR SWING' }[c.kind]} />
+            <Badge
+              x={(c.rect.x + c.rect.w / 2) * S}
+              y={(c.rect.y + c.rect.h / 2) * S}
+              text={{ clash: 'CLASH', outside: 'OUTSIDE ROOM', swing: 'DOOR SWING' }[c.kind]}
+            />
           </g>
         ))}
 
         {/* Selection */}
-        {interactive && selectedId && runs.map(({ run, f }) => {
-          const item = run.items.find((i) => i.id === selectedId);
-          if (!item) return null;
-          const r = footprint(f, item);
-          return <rect key="sel" x={r.x * S - 3} y={r.y * S - 3} width={r.w * S + 6} height={r.h * S + 6} fill="none" stroke={SELECT} strokeWidth={2} style={{ pointerEvents: 'none' }} />;
-        })}
+        {interactive &&
+          selectedId &&
+          runs.map(({ run, f }) => {
+            const item = run.items.find((i) => i.id === selectedId);
+            if (!item) return null;
+            const r = footprint(f, item);
+            return (
+              <rect
+                key="sel"
+                x={r.x * S - 3}
+                y={r.y * S - 3}
+                width={r.w * S + 6}
+                height={r.h * S + 6}
+                fill="none"
+                stroke={SELECT}
+                strokeWidth={2}
+                style={{ pointerEvents: 'none' }}
+              />
+            );
+          })}
 
         {/* Room dimensions */}
         <DimH x0={0} x1={W} y={-t - 44} label={`ROOM ${fmt(room.widthCm)} cm`} color={INK} extFrom={-t - 4} />

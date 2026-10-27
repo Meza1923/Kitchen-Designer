@@ -1,7 +1,16 @@
 import * as THREE from 'three';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import { boxHeight, computeCountertops, isElectrical, isOpening, isWallMounted } from './geometry';
-import { countertopRects, islandRect, localRect, toPlan, wallFrame, WALL_THICKNESS_CM, type Frame, type Rect } from './plan';
+import {
+  countertopRects,
+  islandRect,
+  localRect,
+  toPlan,
+  wallFrame,
+  WALL_THICKNESS_CM,
+  type Frame,
+  type Rect,
+} from './plan';
 
 /**
  * Builds a shaded 3D model of the project. Units are cm; plan X → three X, plan Y → three Z, height → three Y.
@@ -55,7 +64,14 @@ class Builder {
   }
 
   /** Axis-aligned box over plan rect `r` between heights y0..y1. */
-  box(parent: THREE.Object3D, r: Rect, y0: number, y1: number, color: number, o: { opacity?: number; edges?: boolean; item?: KitchenItem; run?: WallRun } = {}) {
+  box(
+    parent: THREE.Object3D,
+    r: Rect,
+    y0: number,
+    y1: number,
+    color: number,
+    o: { opacity?: number; edges?: boolean; item?: KitchenItem; run?: WallRun } = {},
+  ) {
     const h = y1 - y0;
     if (r.w <= 0.01 || r.h <= 0.01 || h <= 0.01) return;
     const geom = new THREE.BoxGeometry(r.w, h, r.h);
@@ -65,7 +81,10 @@ class Builder {
     if (o.item) mesh.userData = { itemId: o.item.id, runId: o.run?.id };
     parent.add(mesh);
     if (o.edges !== false) {
-      const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geom), o.item?.id === this.selectedId ? this.edgeSelected : this.edge);
+      const lines = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geom),
+        o.item?.id === this.selectedId ? this.edgeSelected : this.edge,
+      );
       lines.position.copy(mesh.position);
       lines.raycast = () => {}; // edges never steal clicks
       parent.add(lines);
@@ -73,7 +92,16 @@ class Builder {
   }
 
   /** A disc (washer drum, burner) facing out of the run along its normal. */
-  disc(parent: THREE.Object3D, f: Frame, along: number, depth: number, y: number, radius: number, color: number, flatOnTop = false) {
+  disc(
+    parent: THREE.Object3D,
+    f: Frame,
+    along: number,
+    depth: number,
+    y: number,
+    radius: number,
+    color: number,
+    flatOnTop = false,
+  ) {
     const geom = new THREE.CylinderGeometry(radius, radius, 0.6, 32);
     const mesh = new THREE.Mesh(geom, this.mat(color));
     const p = toPlan(f, along, depth);
@@ -123,7 +151,8 @@ function frontPanels(item: KitchenItem, a0: number, a1: number, y0: number, y1: 
     case 'base_cabinet':
     case 'upper_cabinet':
       if (item.frontType === 'drawers') {
-        const pcts = item.drawerSplitPcts.length === item.drawerCount ? item.drawerSplitPcts : Array(item.drawerCount).fill(1);
+        const pcts =
+          item.drawerSplitPcts.length === item.drawerCount ? item.drawerSplitPcts : Array(item.drawerCount).fill(1);
         return drawers(pcts);
       }
       return doors(item.doorCount, item.category === 'upper_cabinet' ? 'bottom' : 'top');
@@ -142,11 +171,37 @@ function frontPanels(item: KitchenItem, a0: number, a1: number, y0: number, y1: 
           case 'door':
             return doors(1, 'middle', ya, yb);
           case 'oven':
-            return [{ a0: a0 + g, a1: a1 - g, y0: ya + g, y1: yb - g, handle: 'drawer', window: { fa0: 0.12, fa1: 0.88, fy0: 0.1, fy1: 0.72 } }];
+            return [
+              {
+                a0: a0 + g,
+                a1: a1 - g,
+                y0: ya + g,
+                y1: yb - g,
+                handle: 'drawer',
+                window: { fa0: 0.12, fa1: 0.88, fy0: 0.1, fy1: 0.72 },
+              },
+            ];
           case 'microwave':
-            return [{ a0: a0 + g, a1: a1 - g, y0: ya + g, y1: yb - g, window: { fa0: 0.06, fa1: 0.68, fy0: 0.12, fy1: 0.88 } }];
+            return [
+              {
+                a0: a0 + g,
+                a1: a1 - g,
+                y0: ya + g,
+                y1: yb - g,
+                window: { fa0: 0.06, fa1: 0.68, fy0: 0.12, fy1: 0.88 },
+              },
+            ];
           case 'coffee':
-            return [{ a0: a0 + g, a1: a1 - g, y0: ya + g, y1: yb - g, color: C.steel, window: { fa0: 0.3, fa1: 0.7, fy0: 0.2, fy1: 0.75 } }];
+            return [
+              {
+                a0: a0 + g,
+                a1: a1 - g,
+                y0: ya + g,
+                y1: yb - g,
+                color: C.steel,
+                window: { fa0: 0.3, fa1: 0.7, fy0: 0.2, fy1: 0.75 },
+              },
+            ];
           case 'open':
             return [];
         }
@@ -155,14 +210,29 @@ function frontPanels(item: KitchenItem, a0: number, a1: number, y0: number, y1: 
     case 'under_counter_oven':
       return [
         { a0: a0 + g, a1: a1 - g, y0: y1 - 12, y1: y1 - g, color: C.dark },
-        { a0: a0 + g, a1: a1 - g, y0: y0 + g, y1: y1 - 12 - g, handle: 'drawer', window: { fa0: 0.12, fa1: 0.88, fy0: 0.12, fy1: 0.72 } },
+        {
+          a0: a0 + g,
+          a1: a1 - g,
+          y0: y0 + g,
+          y1: y1 - 12 - g,
+          handle: 'drawer',
+          window: { fa0: 0.12, fa1: 0.88, fy0: 0.12, fy1: 0.72 },
+        },
       ];
     default:
       return [];
   }
 }
 
-function addPanels(b: Builder, group: THREE.Object3D, f: Frame, depth: number, item: KitchenItem, run: WallRun, panels: Panel[]) {
+function addPanels(
+  b: Builder,
+  group: THREE.Object3D,
+  f: Frame,
+  depth: number,
+  item: KitchenItem,
+  run: WallRun,
+  panels: Panel[],
+) {
   for (const p of panels) {
     b.box(group, localRect(f, p.a0, p.a1, depth - FRONT, depth), p.y0, p.y1, p.color ?? C.front, { item, run });
     const w = p.a1 - p.a0;
@@ -175,17 +245,36 @@ function addPanels(b: Builder, group: THREE.Object3D, f: Frame, depth: number, i
     if (p.handle === 'drawer') {
       const hw = Math.min(w * 0.4, 30);
       const cy = p.y1 - Math.min(h / 2, 6);
-      b.box(group, localRect(f, p.a0 + (w - hw) / 2, p.a0 + (w + hw) / 2, depth, depth + 2), cy - 0.6, cy + 0.6, C.handle, { edges: false, item, run });
+      b.box(
+        group,
+        localRect(f, p.a0 + (w - hw) / 2, p.a0 + (w + hw) / 2, depth, depth + 2),
+        cy - 0.6,
+        cy + 0.6,
+        C.handle,
+        { edges: false, item, run },
+      );
     } else {
       const ax = p.hinge === 'right' ? p.a0 + 4 : p.a1 - 4;
       const len = Math.min(14, h * 0.3);
-      const cy = p.handle === 'top' ? p.y1 - 5 - len / 2 : p.handle === 'bottom' ? p.y0 + 5 + len / 2 : (p.y0 + p.y1) / 2;
-      b.box(group, localRect(f, ax - 0.6, ax + 0.6, depth, depth + 2), cy - len / 2, cy + len / 2, C.handle, { edges: false, item, run });
+      const cy =
+        p.handle === 'top' ? p.y1 - 5 - len / 2 : p.handle === 'bottom' ? p.y0 + 5 + len / 2 : (p.y0 + p.y1) / 2;
+      b.box(group, localRect(f, ax - 0.6, ax + 0.6, depth, depth + 2), cy - len / 2, cy + len / 2, C.handle, {
+        edges: false,
+        item,
+        run,
+      });
     }
   }
 }
 
-function addItem(b: Builder, group: THREE.Object3D, f: Frame, run: WallRun, item: KitchenItem, counterThickness: number) {
+function addItem(
+  b: Builder,
+  group: THREE.Object3D,
+  f: Frame,
+  run: WallRun,
+  item: KitchenItem,
+  counterThickness: number,
+) {
   const a0 = item.x;
   const a1 = item.x + item.width;
   const d = item.depth;
@@ -209,15 +298,39 @@ function addItem(b: Builder, group: THREE.Object3D, f: Frame, run: WallRun, item
     case 'fridge': {
       b.box(group, localRect(f, a0, a1, 0, d - FRONT), y0, y1, C.steel, o);
       addPanels(b, group, f, d, item, run, [
-        { a0: a0 + GAP, a1: (a0 + a1) / 2 - GAP / 2, y0: y0 + 2, y1: y1 - GAP, color: C.steel, handle: 'middle', hinge: 'left' },
-        { a0: (a0 + a1) / 2 + GAP / 2, a1: a1 - GAP, y0: y0 + 2, y1: y1 - GAP, color: C.steel, handle: 'middle', hinge: 'right' },
+        {
+          a0: a0 + GAP,
+          a1: (a0 + a1) / 2 - GAP / 2,
+          y0: y0 + 2,
+          y1: y1 - GAP,
+          color: C.steel,
+          handle: 'middle',
+          hinge: 'left',
+        },
+        {
+          a0: (a0 + a1) / 2 + GAP / 2,
+          a1: a1 - GAP,
+          y0: y0 + 2,
+          y1: y1 - GAP,
+          color: C.steel,
+          handle: 'middle',
+          hinge: 'right',
+        },
       ]);
       return;
     }
     case 'washing_machine': {
       b.box(group, localRect(f, a0, a1, 0, d), y0, y1, C.front, o);
       b.box(group, localRect(f, a0 + 2, a1 - 2, d, d + 0.3), y1 - 12, y1 - 3, C.steel, { ...o, edges: false });
-      b.disc(group, f, (a0 + a1) / 2, d + 0.3, y0 + (item.height - 12) / 2 + 2, Math.min(item.width, item.height) * 0.3, C.dark);
+      b.disc(
+        group,
+        f,
+        (a0 + a1) / 2,
+        d + 0.3,
+        y0 + (item.height - 12) / 2 + 2,
+        Math.min(item.width, item.height) * 0.3,
+        C.dark,
+      );
       return;
     }
     case 'sink': {
@@ -239,17 +352,49 @@ function addItem(b: Builder, group: THREE.Object3D, f: Frame, run: WallRun, item
       const top = y0 + counterThickness;
       b.box(group, localRect(f, a0 + 1, a1 - 1, 3, d - 1), top, top + 1.5, C.hob, o);
       const n = item.burnerCount ?? 4;
-      const spots = n === 5 ? [[0.2, 0.32], [0.8, 0.32], [0.2, 0.74], [0.8, 0.74], [0.5, 0.53]] : [[0.28, 0.32], [0.72, 0.32], [0.28, 0.74], [0.72, 0.74]];
-      for (const [fa, fd] of spots) b.disc(group, f, a0 + item.width * fa, d * fd, top + 1.8, Math.min(item.width, d) * 0.11, 0x6b7280, true);
+      const spots =
+        n === 5
+          ? [
+              [0.2, 0.32],
+              [0.8, 0.32],
+              [0.2, 0.74],
+              [0.8, 0.74],
+              [0.5, 0.53],
+            ]
+          : [
+              [0.28, 0.32],
+              [0.72, 0.32],
+              [0.28, 0.74],
+              [0.72, 0.74],
+            ];
+      for (const [fa, fd] of spots)
+        b.disc(group, f, a0 + item.width * fa, d * fd, top + 1.8, Math.min(item.width, d) * 0.11, 0x6b7280, true);
       return;
     }
     case 'water_bar':
     case 'coffee_machine': {
       const top = y0 + counterThickness;
-      b.box(group, localRect(f, a0 + 1, a1 - 1, 4, d), top, top + item.height, item.category === 'water_bar' ? C.front : C.steel, o);
+      b.box(
+        group,
+        localRect(f, a0 + 1, a1 - 1, 4, d),
+        top,
+        top + item.height,
+        item.category === 'water_bar' ? C.front : C.steel,
+        o,
+      );
       const w = a1 - a0;
-      b.box(group, localRect(f, a0 + w * 0.2, a1 - w * 0.2, d, d + 0.3), top + item.height * 0.65, top + item.height * 0.9, C.dark, { ...o, edges: false });
-      b.box(group, localRect(f, a0 + w * 0.3, a1 - w * 0.3, d - 12, d + 1), top, top + 1.5, C.handle, { ...o, edges: false });
+      b.box(
+        group,
+        localRect(f, a0 + w * 0.2, a1 - w * 0.2, d, d + 0.3),
+        top + item.height * 0.65,
+        top + item.height * 0.9,
+        C.dark,
+        { ...o, edges: false },
+      );
+      b.box(group, localRect(f, a0 + w * 0.3, a1 - w * 0.3, d - 12, d + 1), top, top + 1.5, C.handle, {
+        ...o,
+        edges: false,
+      });
       return;
     }
   }
@@ -268,9 +413,13 @@ function addWall(b: Builder, root: THREE.Group, data: ProjectData, run: WallRun)
 
   const group = new THREE.Group();
   const inner = toPlan(f, f.length / 2, 0);
-  group.userData.wall = { point: new THREE.Vector3(inner.x, 0, inner.y), normal: new THREE.Vector3(f.n.x, 0, f.n.y) } satisfies WallMeta;
+  group.userData.wall = {
+    point: new THREE.Vector3(inner.x, 0, inner.y),
+    normal: new THREE.Vector3(f.n.x, 0, f.n.y),
+  } satisfies WallMeta;
 
-  const piece = (x0: number, x1: number, y0: number, y1: number) => b.box(group, localRect(f, x0, x1, -T, 0), y0, y1, C.wall);
+  const piece = (x0: number, x1: number, y0: number, y1: number) =>
+    b.box(group, localRect(f, x0, x1, -T, 0), y0, y1, C.wall);
   const openings = run.items.filter((i) => isOpening(i.category)).sort((p, q) => p.x - q.x);
   let cursor = start;
   for (const op of openings) {
@@ -281,15 +430,28 @@ function addWall(b: Builder, root: THREE.Group, data: ProjectData, run: WallRun)
     if (op.y + op.height < H) piece(x0, x1, op.y + op.height, H);
     const o = { item: op, run };
     if (op.category === 'window') {
-      b.box(group, localRect(f, x0, x1, -T / 2 - 0.5, -T / 2 + 0.5), op.y, op.y + op.height, C.glass, { ...o, opacity: 0.35 });
+      b.box(group, localRect(f, x0, x1, -T / 2 - 0.5, -T / 2 + 0.5), op.y, op.y + op.height, C.glass, {
+        ...o,
+        opacity: 0.35,
+      });
       b.box(group, localRect(f, x0 - 3, x1 + 3, 0, 4), op.y - 2, op.y, C.front, o); // sill
     } else {
       const out = op.doorSwing === 'out';
       const face = out ? -T : 0;
-      b.box(group, localRect(f, x0 + 0.5, x1 - 0.5, out ? face : face - 4, out ? face + 4 : face), 0, op.y + op.height - 0.5, C.door, o);
+      b.box(
+        group,
+        localRect(f, x0 + 0.5, x1 - 0.5, out ? face : face - 4, out ? face + 4 : face),
+        0,
+        op.y + op.height - 0.5,
+        C.door,
+        o,
+      );
       const hx = op.doorHinge === 'right' ? x0 + 7 : x1 - 7;
       const hd = out ? face - 3 : face + 3;
-      b.box(group, localRect(f, hx - 6, hx + 6, Math.min(face, hd), Math.max(face, hd)), 103, 105, C.handle, { ...o, edges: false });
+      b.box(group, localRect(f, hx - 6, hx + 6, Math.min(face, hd), Math.max(face, hd)), 103, 105, C.handle, {
+        ...o,
+        edges: false,
+      });
     }
     cursor = Math.max(cursor, x1);
   }
@@ -299,12 +461,19 @@ function addWall(b: Builder, root: THREE.Group, data: ProjectData, run: WallRun)
   for (const s of run.items.filter((i) => isElectrical(i.category))) {
     const o = { item: s, run };
     b.box(group, localRect(f, s.x, s.x + s.width, 0, 0.8), s.y, s.y + s.height, C.front, o);
-    const n = s.category === 'power_socket' ? 1 : s.socketCount ?? 1;
+    const n = s.category === 'power_socket' ? 1 : (s.socketCount ?? 1);
     const cell = s.width / n;
     for (let k = 0; k < n; k++) {
       const c = s.x + cell * (k + 0.5);
       const r = Math.min(cell, s.height) * 0.3;
-      b.box(group, localRect(f, c - r, c + r, 0.8, 1.1), s.y + s.height / 2 - r, s.y + s.height / 2 + r, s.category === 'power_socket' ? 0xb91c1c : C.steel, { ...o, edges: false });
+      b.box(
+        group,
+        localRect(f, c - r, c + r, 0.8, 1.1),
+        s.y + s.height / 2 - r,
+        s.y + s.height / 2 + r,
+        s.category === 'power_socket' ? 0xb91c1c : C.steel,
+        { ...o, edges: false },
+      );
     }
   }
   root.add(group);
@@ -320,7 +489,12 @@ export function buildKitchen(data: ProjectData, selectedId: string | null): THRE
   floor.position.set(room.widthCm / 2, 0, room.depthCm / 2);
   floor.receiveShadow = true;
   root.add(floor);
-  const grid = new THREE.GridHelper(Math.max(room.widthCm, room.depthCm), Math.round(Math.max(room.widthCm, room.depthCm) / 50), 0xd6d3d1, 0xd6d3d1);
+  const grid = new THREE.GridHelper(
+    Math.max(room.widthCm, room.depthCm),
+    Math.round(Math.max(room.widthCm, room.depthCm) / 50),
+    0xd6d3d1,
+    0xd6d3d1,
+  );
   grid.position.set(room.widthCm / 2, 0.05, room.depthCm / 2);
   grid.raycast = () => {};
   root.add(grid);

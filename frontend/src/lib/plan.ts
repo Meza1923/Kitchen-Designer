@@ -1,5 +1,13 @@
 import type { KitchenItem, ProjectData, Room, WallRun } from '../types';
-import { canCollide, computeCountertops, isCounterBearing, layerOf, normalizeWall, round1, type Countertop } from './geometry';
+import {
+  canCollide,
+  computeCountertops,
+  isCounterBearing,
+  layerOf,
+  normalizeWall,
+  round1,
+  type Countertop,
+} from './geometry';
 
 /** Plan coordinates: cm, X to the right (east), Y down (south), origin at the room's north-west inner corner. */
 export interface Pt {
@@ -39,7 +47,9 @@ export function wallFrame(room: Room, run: WallRun): Frame {
   // Walls behave like an island whose footprint is the whole room, rotated per side.
   const box: Rect = run.kind === 'island' ? islandRect(run) : { x: 0, y: 0, w: room.widthCm, h: room.depthCm };
   const rotation =
-    run.kind === 'island' ? run.rotationDeg ?? 0 : ({ north: 0, east: 90, south: 180, west: 270 } as const)[run.side ?? 'north'];
+    run.kind === 'island'
+      ? (run.rotationDeg ?? 0)
+      : ({ north: 0, east: 90, south: 180, west: 270 } as const)[run.side ?? 'north'];
   const { x, y, w, h } = box;
   switch (rotation) {
     case 0:
@@ -65,10 +75,12 @@ export function localRect(f: Frame, x0: number, x1: number, d0: number, d1: numb
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
 }
 
-export const itemPlanRect = (f: Frame, item: KitchenItem): Rect => localRect(f, item.x, item.x + item.width, 0, item.depth);
+export const itemPlanRect = (f: Frame, item: KitchenItem): Rect =>
+  localRect(f, item.x, item.x + item.width, 0, item.depth);
 
 /** Floor area swept by a door leaf opening into the room (a width × width square in front of it). */
-export const doorSwingRect = (f: Frame, door: KitchenItem): Rect => localRect(f, door.x, door.x + door.width, 0, door.width);
+export const doorSwingRect = (f: Frame, door: KitchenItem): Rect =>
+  localRect(f, door.x, door.x + door.width, 0, door.width);
 
 /** Wall-local x of a plan point (projection onto the run's axis). */
 export const planPointToWallX = (f: Frame, p: Pt): number => (p.x - f.origin.x) * f.u.x + (p.y - f.origin.y) * f.u.y;
@@ -127,7 +139,8 @@ export function computePlanConflicts(data: ProjectData): PlanConflict[] {
       }
       for (const isl of data.walls.filter((w) => w.kind === 'island')) {
         const r = islandRect(isl);
-        if (rectsOverlap(swing, r)) conflicts.push({ a: door.id, b: isl.id, rect: rectIntersection(swing, r), kind: 'swing' });
+        if (rectsOverlap(swing, r))
+          conflicts.push({ a: door.id, b: isl.id, rect: rectIntersection(swing, r), kind: 'swing' });
       }
     }
   }
@@ -150,7 +163,8 @@ export function syncRoom(data: ProjectData): ProjectData {
       normalizeWall({
         ...w,
         heightCm: room.heightCm,
-        widthCm: w.kind === 'wall' ? (w.side === 'north' || w.side === 'south' ? room.widthCm : room.depthCm) : w.widthCm,
+        widthCm:
+          w.kind === 'wall' ? (w.side === 'north' || w.side === 'south' ? room.widthCm : room.depthCm) : w.widthCm,
       }),
     ),
   };

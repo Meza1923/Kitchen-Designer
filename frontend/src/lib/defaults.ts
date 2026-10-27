@@ -1,4 +1,13 @@
-import type { ElementCategory, KitchenItem, ProjectData, Room, TallZoneConfig, TallZoneType, WallRun, WallSide } from '../types';
+import type {
+  ElementCategory,
+  KitchenItem,
+  ProjectData,
+  Room,
+  TallZoneConfig,
+  TallZoneType,
+  WallRun,
+  WallSide,
+} from '../types';
 
 export const uid = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto

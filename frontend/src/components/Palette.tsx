@@ -1,6 +1,22 @@
 import type { LucideIcon } from 'lucide-react';
 import type { KitchenItem } from '../types';
-import { AppWindow, Coffee, DoorOpen, Droplets, Flame, GlassWater, Microwave, PanelTop, Plug, RectangleVertical, Refrigerator, Slash, Square, WashingMachine, Zap } from 'lucide-react';
+import {
+  AppWindow,
+  Coffee,
+  DoorOpen,
+  Droplets,
+  Flame,
+  GlassWater,
+  Microwave,
+  PanelTop,
+  Plug,
+  RectangleVertical,
+  Refrigerator,
+  Slash,
+  Square,
+  WashingMachine,
+  Zap,
+} from 'lucide-react';
 import type { ElementCategory } from '../types';
 import { CATEGORY_LABELS, socketWidth } from '../lib/defaults';
 

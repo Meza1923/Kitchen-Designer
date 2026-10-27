@@ -52,8 +52,7 @@ export const fmt = (v: number) => (Number.isInteger(round1(v)) ? String(round1(v
 export const toScreenY = (wallHeightCm: number, itemYCm: number, itemHeightCm: number, scale: number) =>
   wallHeightCm * scale - (itemYCm + itemHeightCm) * scale;
 
-const overlaps1d = (a0: number, a1: number, b0: number, b1: number) =>
-  a0 < b1 - FLUSH_EPS_CM && b0 < a1 - FLUSH_EPS_CM;
+const overlaps1d = (a0: number, a1: number, b0: number, b1: number) => a0 < b1 - FLUSH_EPS_CM && b0 < a1 - FLUSH_EPS_CM;
 
 const right = (i: KitchenItem) => i.x + i.width;
 const top = (i: KitchenItem) => i.y + i.height;
@@ -77,7 +76,8 @@ export function normalizeWall(wall: WallRun): WallRun {
       let y = i.y;
       if (layer === 'counter') y = counterBaseTop(wall, { ...i, x });
       else if (i.category === 'door') y = 0;
-      else if (layer === 'upper' || layer === 'electrical') y = Math.min(Math.max(0, i.y), Math.max(0, wall.heightCm - i.height));
+      else if (layer === 'upper' || layer === 'electrical')
+        y = Math.min(Math.max(0, i.y), Math.max(0, wall.heightCm - i.height));
       return x === i.x && y === i.y ? i : { ...i, x, y };
     }),
   };
@@ -158,7 +158,8 @@ function gapVertical(neighbours: KitchenItem[]): [number, number] {
  */
 export function computeGaps(wall: WallRun, layer: 'floor' | 'upper'): Gap[] {
   const own = itemsInLayer(wall, layer);
-  const reaching = layer === 'upper' ? itemsInLayer(wall, 'floor').filter((f) => own.some((u) => canCollide(f, u))) : [];
+  const reaching =
+    layer === 'upper' ? itemsInLayer(wall, 'floor').filter((f) => own.some((u) => canCollide(f, u))) : [];
   const items = [...own, ...reaching].sort((a, b) => a.x - b.x);
   if (!own.length) return [];
   const gaps: Gap[] = [];
@@ -251,12 +252,17 @@ export function computeCountertops(wall: WallRun): Countertop[] {
     // 3. Split the run where the base height changes.
     let run: Countertop | null = null;
     for (const u of group.slice(s, e + 1)) {
-      const uTop: number = isCounterBearing(u.category) ? top(u) : run?.y ?? top(u);
+      const uTop: number = isCounterBearing(u.category) ? top(u) : (run?.y ?? top(u));
       if (run && Math.abs(run.y - uTop) < FLUSH_EPS_CM) {
         run.width = Math.max(run.width, right(u) - run.x);
       } else {
         if (run) slabs.push(run);
-        run = { x: run ? Math.max(u.x, run.x + run.width) : u.x, width: 0, y: uTop, thickness: wall.countertopThicknessCm };
+        run = {
+          x: run ? Math.max(u.x, run.x + run.width) : u.x,
+          width: 0,
+          y: uTop,
+          thickness: wall.countertopThicknessCm,
+        };
         run.width = right(u) - run.x;
       }
     }
@@ -295,7 +301,9 @@ export function computeSocketIssues(wall: WallRun): SocketIssue[] {
 function findSocketX(wall: WallRun, item: KitchenItem): number {
   const fits = (x: number) => {
     const s = { ...item, x };
-    const clash = wall.items.some((o) => isElectrical(o.category) && canCollide(s, o) && overlaps1d(x, x + s.width, o.x, right(o)));
+    const clash = wall.items.some(
+      (o) => isElectrical(o.category) && canCollide(s, o) && overlaps1d(x, x + s.width, o.x, right(o)),
+    );
     return !clash && !computeSocketIssues({ ...wall, items: [...wall.items, s] }).some((i) => i.item.id === s.id);
   };
   const ranges = [...computeCountertops(wall).map((c) => [c.x + 10, c.x + c.width]), [10, wall.widthCm]];
@@ -319,7 +327,9 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number {
     // Otherwise the first free stretch of countertop wide enough for it.
     for (const slab of computeCountertops(wall)) {
       let cursor = slab.x;
-      for (const c of occupied.filter((o) => overlaps1d(o.x, right(o), slab.x, slab.x + slab.width)).sort((a, b) => a.x - b.x)) {
+      for (const c of occupied
+        .filter((o) => overlaps1d(o.x, right(o), slab.x, slab.x + slab.width))
+        .sort((a, b) => a.x - b.x)) {
         if (c.x - cursor >= item.width) return cursor;
         cursor = Math.max(cursor, right(c));
       }

@@ -10,7 +10,13 @@ const ISLAND_GRID_CM = 5;
 
 type Drag =
   | { kind: 'item'; runId: string; itemId: string; startX: number; startProj: number; moved: boolean }
-  | { kind: 'island'; runId: string; startPlan: { x: number; y: number }; startPt: { x: number; y: number }; moved: boolean };
+  | {
+      kind: 'island';
+      runId: string;
+      startPlan: { x: number; y: number };
+      startPt: { x: number; y: number };
+      moved: boolean;
+    };
 
 interface Props {
   data: ProjectData;
@@ -41,7 +47,14 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
     onSelect(run.id, item.id);
     vp.svgRef.current!.setPointerCapture(e.pointerId);
     const f = wallFrame(data.room, run);
-    drag.current = { kind: 'item', runId: run.id, itemId: item.id, startX: item.x, startProj: planPointToWallX(f, toCm(e)), moved: false };
+    drag.current = {
+      kind: 'item',
+      runId: run.id,
+      itemId: item.id,
+      startX: item.x,
+      startProj: planPointToWallX(f, toCm(e)),
+      moved: false,
+    };
   };
 
   const onRunPointerDown = (e: ReactPointerEvent, run: WallRun) => {
@@ -50,7 +63,13 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
     onActivate(run.id);
     if (run.kind !== 'island') return;
     vp.svgRef.current!.setPointerCapture(e.pointerId);
-    drag.current = { kind: 'island', runId: run.id, startPlan: { x: run.planX ?? 0, y: run.planY ?? 0 }, startPt: toCm(e), moved: false };
+    drag.current = {
+      kind: 'island',
+      runId: run.id,
+      startPlan: { x: run.planX ?? 0, y: run.planY ?? 0 },
+      startPt: toCm(e),
+      moved: false,
+    };
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
@@ -100,8 +119,20 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <GridBackground id="planGrid" cell={10 * PLAN_SCALE} originX={planOrigin(PLAN_SCALE)} originY={planOrigin(PLAN_SCALE)} />
-        <PlanDrawing data={data} scale={PLAN_SCALE} selectedId={selectedId} interactive onItemPointerDown={onItemPointerDown} onRunPointerDown={onRunPointerDown} />
+        <GridBackground
+          id="planGrid"
+          cell={10 * PLAN_SCALE}
+          originX={planOrigin(PLAN_SCALE)}
+          originY={planOrigin(PLAN_SCALE)}
+        />
+        <PlanDrawing
+          data={data}
+          scale={PLAN_SCALE}
+          selectedId={selectedId}
+          interactive
+          onItemPointerDown={onItemPointerDown}
+          onRunPointerDown={onRunPointerDown}
+        />
       </svg>
       <ZoomControls zoom={vp.zoom} onZoom={(f) => vp.zoomAt(f)} onFit={vp.fit} />
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
