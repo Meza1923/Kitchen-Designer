@@ -38,6 +38,9 @@ export interface KitchenItem {
   hasToeKick: boolean;
   toeKickHeight: number; // Default 10cm or 12cm
 
+  // For counter-bearing units (base cabinet, under-counter oven, corner blocker): leave out the countertop slab
+  noCountertop?: boolean;
+
   // For 'base_cabinet' and 'upper_cabinet'
   frontType: 'doors' | 'drawers';
   doorCount: 1 | 2;

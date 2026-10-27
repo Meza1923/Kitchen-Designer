@@ -42,6 +42,7 @@ class KitchenItem(BaseModel):
     depth: Optional[float] = None  # cm into the room; filled with a category default by the client
     hasToeKick: bool = False
     toeKickHeight: float = 10
+    noCountertop: Optional[bool] = None  # counter-bearing units only: leave out the countertop slab
     frontType: Literal["doors", "drawers"] = "doors"
     doorCount: Literal[1, 2] = 1
     drawerCount: int = Field(default=3, ge=1, le=5)

@@ -33,6 +33,8 @@ export const layerOf = (c: ElementCategory): Layer =>
 export const isElectrical = (c: ElementCategory) => ELECTRICAL.includes(c);
 
 export const isCounterBearing = (c: ElementCategory) => COUNTER_BEARING.includes(c);
+/** A counter-bearing unit that actually gets a countertop slab (the user can switch it off per unit). */
+export const carriesCountertop = (i: KitchenItem) => isCounterBearing(i.category) && !i.noCountertop;
 export const hasCabinetFronts = (c: ElementCategory) => c === 'base_cabinet' || c === 'upper_cabinet';
 export const hasToeKickOption = (c: ElementCategory) =>
   ['base_cabinet', 'tall_cabinet', 'corner_blocker', 'under_counter_oven', 'upper_cabinet'].includes(c);
@@ -223,12 +225,13 @@ export interface Countertop {
 }
 
 /**
- * Continuous countertop runs over base cabinets, under-counter ovens and corner blockers.
- * Touching units merge into one slab; washing machines are bridged when flanked by base units.
+ * Continuous countertop runs over base cabinets, under-counter ovens and corner blockers (unless switched off
+ * per unit, which splits the run). Touching units merge into one slab; washing machines are bridged when flanked
+ * by base units.
  */
 export function computeCountertops(wall: WallRun): Countertop[] {
   const units = wall.items
-    .filter((i) => isCounterBearing(i.category) || i.category === 'washing_machine')
+    .filter((i) => carriesCountertop(i) || i.category === 'washing_machine')
     .sort((a, b) => a.x - b.x);
 
   // 1. Contiguous groups (touching or overlapping).
@@ -245,14 +248,14 @@ export function computeCountertops(wall: WallRun): Countertop[] {
     // 2. Washers only get a countertop when flanked by bearing units, so trim them from the ends.
     let s = 0;
     let e = group.length - 1;
-    while (s <= e && !isCounterBearing(group[s].category)) s++;
-    while (e >= s && !isCounterBearing(group[e].category)) e--;
+    while (s <= e && !carriesCountertop(group[s])) s++;
+    while (e >= s && !carriesCountertop(group[e])) e--;
     if (s > e) continue;
 
     // 3. Split the run where the base height changes.
     let run: Countertop | null = null;
     for (const u of group.slice(s, e + 1)) {
-      const uTop: number = isCounterBearing(u.category) ? top(u) : (run?.y ?? top(u));
+      const uTop: number = carriesCountertop(u) ? top(u) : (run?.y ?? top(u));
       if (run && Math.abs(run.y - uTop) < FLUSH_EPS_CM) {
         run.width = Math.max(run.width, right(u) - run.x);
       } else {
@@ -320,7 +323,7 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number {
   if (layer === 'counter') {
     const occupied = itemsInLayer(wall, 'counter');
     const host = wall.items
-      .filter((i) => isCounterBearing(i.category) && i.category !== 'corner_blocker')
+      .filter((i) => carriesCountertop(i) && i.category !== 'corner_blocker')
       .sort((a, b) => a.x - b.x)
       .find((b) => !occupied.some((c) => overlaps1d(c.x, right(c), b.x, right(b))));
     if (host) return clampX(wall, item, host.x + (host.width - item.width) / 2);

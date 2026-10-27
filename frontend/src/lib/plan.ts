@@ -2,7 +2,7 @@ import type { KitchenItem, ProjectData, Room, WallRun } from '../types';
 import {
   canCollide,
   computeCountertops,
-  isCounterBearing,
+  carriesCountertop,
   layerOf,
   normalizeWall,
   round1,
@@ -87,7 +87,7 @@ export const planPointToWallX = (f: Frame, p: Pt): number => (p.x - f.origin.x) 
 
 /** Countertop slab with its plan depth: the deepest unit under it plus a 2 cm front overhang. */
 export function countertopDepth(run: WallRun, c: Countertop): number {
-  const under = run.items.filter((i) => isCounterBearing(i.category) && i.x < c.x + c.width && i.x + i.width > c.x);
+  const under = run.items.filter((i) => carriesCountertop(i) && i.x < c.x + c.width && i.x + i.width > c.x);
   return (under.length ? Math.max(...under.map((i) => i.depth)) : 60) + 2;
 }
 

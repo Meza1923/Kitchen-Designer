@@ -178,6 +178,40 @@ describe('computeCountertops', () => {
     const w = wall([item('base_cabinet', { x: 0 }), item('base_cabinet', { x: 100 })]);
     expect(computeCountertops(w)).toHaveLength(2);
   });
+
+  describe('units without a countertop', () => {
+    it('split the slab around them', () => {
+      const w = wall([
+        item('base_cabinet', { x: 0 }),
+        item('base_cabinet', { x: 60, noCountertop: true }),
+        item('base_cabinet', { x: 120 }),
+      ]);
+      expect(computeCountertops(w).map((s) => [s.x, s.width])).toEqual([
+        [0, 60],
+        [120, 60],
+      ]);
+    });
+
+    it('get no slab when standing alone', () => {
+      expect(computeCountertops(wall([item('base_cabinet', { noCountertop: true })]))).toEqual([]);
+    });
+
+    it('do not let a washing machine bridge onto them', () => {
+      const w = wall([
+        item('base_cabinet', { x: 0 }),
+        item('washing_machine', { x: 60 }),
+        item('base_cabinet', { x: 120, noCountertop: true }),
+      ]);
+      expect(computeCountertops(w)).toEqual([{ x: 0, width: 60, y: 87, thickness: 3 }]);
+    });
+
+    it('leave a sink on them unsupported, and new counter items go elsewhere', () => {
+      const bare = item('base_cabinet', { x: 0, noCountertop: true });
+      const sink = item('sink', { id: 'sink', x: 0 });
+      expect(computeUnsupported(wall([bare, sink])).map((i) => i.id)).toEqual(['sink']);
+      expect(findFreeX(wall([bare, item('base_cabinet', { x: 60 })]), item('stove'))).toBe(60);
+    });
+  });
 });
 
 describe('computeUnsupported', () => {

@@ -18,6 +18,7 @@ import {
   fmt,
   hasCabinetFronts,
   hasToeKickOption,
+  isCounterBearing,
   isElectrical,
   isWallMounted,
   layerOf,
@@ -471,6 +472,18 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
                 onChange={(toeKickHeight) => onChange({ toeKickHeight })}
               />
             </div>
+          </Field>
+        )}
+        {isCounterBearing(item.category) && (
+          <Field label="Countertop">
+            <label className="flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={!item.noCountertop}
+                onChange={(e) => onChange({ noCountertop: e.target.checked ? undefined : true })}
+              />
+              Has countertop
+            </label>
           </Field>
         )}
       </Section>

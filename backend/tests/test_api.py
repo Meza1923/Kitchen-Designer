@@ -46,7 +46,7 @@ def test_crud_roundtrip(client):
     pid = created["id"]
 
     data = created["data"]
-    data["walls"][0]["items"].append(base_cabinet(label="Sink base"))
+    data["walls"][0]["items"].append(base_cabinet(label="Sink base", noCountertop=True))
     res = client.put(f"/api/projects/{pid}", json={"name": "Flat v2", "data": data})
     assert res.status_code == 200
 
@@ -55,6 +55,7 @@ def test_crud_roundtrip(client):
     item = loaded["data"]["walls"][0]["items"][0]
     assert item["label"] == "Sink base"
     assert item["drawerCount"] == 3  # filled from the schema default
+    assert item["noCountertop"] is True
 
     listed = client.get("/api/projects").json()
     assert [(p["id"], p["name"]) for p in listed] == [(pid, "Flat v2")]

@@ -114,6 +114,8 @@ export interface components {
             id: string;
             /** Label */
             label?: string | null;
+            /** Nocountertop */
+            noCountertop?: boolean | null;
             /** Sinkbowls */
             sinkBowls?: (1 | 2) | null;
             /** Socketcount */
