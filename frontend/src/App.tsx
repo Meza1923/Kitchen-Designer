@@ -19,11 +19,20 @@ import {
   Undo2,
 } from 'lucide-react';
 import type { ElementCategory, KitchenItem, ProjectData, Room, WallRun } from './types';
-import { createIsland, createItem, createProjectData, uid } from './lib/defaults';
-import { clampX, findFreeX, isWallMounted, layerOf, normalizeWall } from './lib/geometry';
+import { CATEGORY_LABELS, createIsland, createItem, createProjectData, uid } from './lib/defaults';
+import {
+  clampX,
+  computeCountertops,
+  findFreeX,
+  fmt,
+  isWallOnly,
+  layerOf,
+  normalizeWall,
+  widestGapX,
+} from './lib/geometry';
 import { api } from './lib/api';
 import { migrateProjectData } from './lib/migrate';
-import { syncRoom } from './lib/plan';
+import { roomChangeWarnings, syncRoom } from './lib/plan';
 import { exportJson, exportPng, importJson, printPdf, scheduleRows } from './lib/export';
 import { applyAllFixes, checkProject, type Violation } from './lib/rules';
 import { ProblemsList } from './components/ProblemsList';
@@ -233,8 +242,34 @@ export default function App() {
     });
   };
 
-  const updateRoom = (patch: Partial<Room>) =>
-    setData((d) => syncRoom({ ...d, room: { ...d.room, ...patch } }), { key: `room:${Object.keys(patch).join(',')}` });
+  /**
+   * Room size changes are applied on Enter / leaving the field. When the new size makes elements overlap or leaves an
+   * island outside the room, the user confirms first; cancelling keeps the old size.
+   */
+  const updateRoom = (patch: Partial<Room>) => {
+    const next = syncRoom({ ...data, room: { ...data.room, ...patch } });
+    const warnings = roomChangeWarnings(data, next);
+    if (warnings.length && !confirm(`${warnings.join('\n')}\n\nApply the new room size anyway? (Undo brings it back.)`))
+      return;
+    setData(() => next, { key: `room:${Object.keys(patch).join(',')}` });
+  };
+
+  /** Free spot for a new element; when there is none, the widest gap, with a message saying it overlaps. */
+  const placeOnWall = (run: WallRun, item: KitchenItem) => {
+    const free = findFreeX(run, item);
+    if (free !== null) return free;
+    const x = widestGapX(run, item);
+    const name = CATEGORY_LABELS[item.category];
+    notify(
+      'error',
+      layerOf(item.category) === 'counter' && computeCountertops(run).length === 0
+        ? `There is no countertop on ${run.name} for the ${name}: add base cabinets first. It was placed at X ${fmt(x)} for now.`
+        : layerOf(item.category) === 'counter'
+          ? `No free ${fmt(item.width)} cm of countertop on ${run.name} for the ${name}: it was placed at X ${fmt(x)}, over other items or past the countertop. Move it, or make room.`
+          : `No free ${fmt(item.width)} cm space on ${run.name} for the ${name}: it was placed over other elements at X ${fmt(x)}. Move or narrow it, or make room.`,
+    );
+    return x;
+  };
 
   const applyFix = (v: Violation) => {
     const result = v.fix!.apply(data);
@@ -256,12 +291,12 @@ export default function App() {
   };
 
   const addItem = (category: ElementCategory, overrides: Partial<KitchenItem> = {}) => {
-    if (isWallMounted(category) && wall.kind !== 'wall') {
-      notify('error', 'Doors, windows and sockets go on a wall: select Wall A–D first.');
+    if (isWallOnly(category) && wall.kind !== 'wall') {
+      notify('error', 'Doors, windows, sockets and open wall shelves go on a wall: select Wall A–D first.');
       return;
     }
     const item = { ...createItem(category), ...overrides };
-    item.x = findFreeX(wall, item);
+    item.x = placeOnWall(wall, item);
     updateWall(wall.id, (w) => ({ ...w, items: [...w.items, item] }));
     setSelectedId(item.id);
   };
@@ -270,7 +305,7 @@ export default function App() {
     const copy: KitchenItem = { ...structuredClone(item), id: uid() };
     copy.tallZones = copy.tallZones?.map((z) => ({ ...z, id: uid() }));
     const besideRight = item.x + item.width;
-    copy.x = besideRight + item.width <= wall.widthCm ? besideRight : findFreeX(wall, copy);
+    copy.x = besideRight + item.width <= wall.widthCm ? besideRight : placeOnWall(wall, copy);
     updateWall(wall.id, (w) => ({ ...w, items: [...w.items, copy] }));
     setSelectedId(copy.id);
   };

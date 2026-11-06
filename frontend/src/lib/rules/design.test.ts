@@ -56,7 +56,7 @@ describe('R2 wall-adjacent hinge binding', () => {
 
 describe('R4 opposing aisle deadlock', () => {
   it('flags a narrow aisle between opposite walls', () => {
-    const data = project({ north: [{ x: 100 }], south: [{ x: 240 }] }, (walls) => (room.depthCm = 300) && walls);
+    const data = project({ north: [{ x: 100 }], south: [{ x: 240 }] });
     // 300 − 60 − 60 = 180 cm: fine.
     expect(found(data, 'R4')).toEqual([]);
   });
@@ -172,8 +172,11 @@ describe('R14 zero-tolerance wall run', () => {
   const full = (filler: number) => {
     const units: Partial<KitchenItem>[] = [];
     let x = 0;
-    if (filler) (units.push({ category: 'filler', x, width: filler }), (x += filler));
-    while (x + 60 <= 400 - 0.01) (units.push({ x }), (x += 60));
+    if (filler) {
+      units.push({ category: 'filler', x, width: filler });
+      x += filler;
+    }
+    for (; x + 60 <= 400 - 0.01; x += 60) units.push({ x });
     units.push({ x, width: 400 - x });
     return project({ north: units });
   };

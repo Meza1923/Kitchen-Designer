@@ -118,11 +118,11 @@ describe('filler fixes', () => {
                 const rest: Partial<KitchenItem>[] = [];
                 if (full && end === 'start') {
                   let cx = x + w;
-                  while (cx + 60 <= L - 0.01) (rest.push({ x: cx }), (cx += 60));
+                  for (; cx + 60 <= L - 0.01; cx += 60) rest.push({ x: cx });
                   if (L - cx >= 30) rest.push({ x: cx, width: L - cx });
                 } else if (full) {
                   let cx = x;
-                  while (cx - 60 >= -0.01) (rest.push({ x: cx - 60 }), (cx -= 60));
+                  for (; cx - 60 >= -0.01; cx -= 60) rest.push({ x: cx - 60 });
                   if (cx >= 30) rest.push({ x: 0, width: cx });
                 } else rest.push({ x: end === 'start' ? x + w : x - 60 });
                 const data = project({

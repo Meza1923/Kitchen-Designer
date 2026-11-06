@@ -52,6 +52,16 @@ export function FrontsPanel({
           />
         </div>
       )}
+      {item.frontType !== 'drawers' && (
+        <div className="mt-3">
+          <span className="label">Shelves inside</span>
+          <Chips
+            options={[0, 1, 2, 3, 4, 5]}
+            value={item.shelfCount ?? 0}
+            onChange={(n) => onChange({ shelfCount: n || undefined })}
+          />
+        </div>
+      )}
       <p className="mt-4 text-[11px] text-slate-400">Other properties are edited in the Plan or Elevation view.</p>
     </div>
   );

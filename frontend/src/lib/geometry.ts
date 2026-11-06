@@ -34,6 +34,21 @@ export const layerOf = (c: ElementCategory): Layer =>
 export const isElectrical = (c: ElementCategory) => ELECTRICAL.includes(c);
 
 export const isCounterBearing = (c: ElementCategory) => COUNTER_BEARING.includes(c);
+/**
+ * A filler only carries the countertop when it touches a base unit that does and isn't taller than it, so a filler
+ * between a wall and a fridge (or a full-height filler) gets no countertop sliver of its own. Non-fillers: true.
+ */
+function fillerCarriesCounter(wall: WallRun, f: KitchenItem): boolean {
+  if (f.category !== 'filler') return true;
+  return wall.items.some(
+    (u) =>
+      u.category !== 'filler' &&
+      carriesCountertop(u) &&
+      (Math.abs(u.x - right(f)) < FLUSH_EPS_CM || Math.abs(right(u) - f.x) < FLUSH_EPS_CM) &&
+      top(f) <= top(u) + 0.5,
+  );
+}
+
 /** A counter-bearing unit that actually gets a countertop slab (the user can switch it off per unit). */
 export const carriesCountertop = (i: KitchenItem) => isCounterBearing(i.category) && !i.noCountertop;
 export const hasCabinetFronts = (c: ElementCategory) => c === 'base_cabinet' || c === 'upper_cabinet';
@@ -44,6 +59,8 @@ export const canMoveVertically = (c: ElementCategory) => (layerOf(c) === 'upper'
 export const isOpening = (c: ElementCategory) => c === 'window' || c === 'door';
 /** Items fixed in or on a wall (openings and sockets): walls only, never islands. */
 export const isWallMounted = (c: ElementCategory) => isOpening(c) || isElectrical(c);
+/** Elements that need a wall behind them: wall-mounted items and open wall shelves (never on islands). */
+export const isWallOnly = (c: ElementCategory) => isWallMounted(c) || c === 'shelf';
 
 export const round1 = (v: number) => Math.round(v * 10) / 10;
 export const fmt = (v: number) => (Number.isInteger(round1(v)) ? String(round1(v)) : round1(v).toFixed(1));
@@ -65,7 +82,9 @@ export const itemsInLayer = (wall: WallRun, layer: Layer) => wall.items.filter((
 /** Top of the countertop-bearing unit under the item's centre (where sinks and cooktops sit). */
 export function counterBaseTop(wall: WallRun, item: KitchenItem): number {
   const cx = item.x + item.width / 2;
-  const under = wall.items.filter((i) => isCounterBearing(i.category) && i.x <= cx && right(i) >= cx);
+  const under = wall.items.filter(
+    (i) => isCounterBearing(i.category) && fillerCarriesCounter(wall, i) && i.x <= cx && right(i) >= cx,
+  );
   return under.length ? Math.max(...under.map(top)) : DEFAULT_BASE_HEIGHT;
 }
 
@@ -173,6 +192,26 @@ export function computeGaps(wall: WallRun, layer: 'floor' | 'upper'): Gap[] {
     const [y0, y1] = gapVertical(neighbours);
     gaps.push({ layer, x0, x1, width, y0, y1, warning: width < GAP_WARNING_CM });
   };
+  if (layer === 'upper') {
+    // Upper items sit at different heights (a shelf below a wall cabinet), so each one is measured only against
+    // neighbours in its own height band, and against the walls where nothing in that band is in the way.
+    const all = [...own, ...reaching];
+    const seen = new Set<string>();
+    const once = (x0: number, x1: number, neighbours: KitchenItem[]) => {
+      const key = `${round1(x0)}:${round1(x1)}`;
+      if (x1 - x0 < FLUSH_EPS_CM || seen.has(key)) return;
+      seen.add(key);
+      push(x0, x1, neighbours);
+    };
+    for (const u of own) {
+      const band = all.filter((o) => o.id !== u.id && overlaps1d(u.y, top(u), o.y, top(o)));
+      const left = band.filter((o) => o.x < u.x - FLUSH_EPS_CM).sort((p, q) => right(q) - right(p))[0];
+      const rightN = band.filter((o) => right(o) > right(u) + FLUSH_EPS_CM).sort((p, q) => p.x - q.x)[0];
+      if (!left || right(left) < u.x) once(left ? right(left) : 0, u.x, left ? [left, u] : [u]);
+      if (!rightN || rightN.x > right(u)) once(right(u), rightN ? rightN.x : wall.widthCm, rightN ? [u, rightN] : [u]);
+    }
+    return gaps.sort((p, q) => p.x0 - q.x0);
+  }
   let cursor = 0;
   let prev: KitchenItem | null = null;
   for (const item of items) {
@@ -232,7 +271,7 @@ export interface Countertop {
  */
 export function computeCountertops(wall: WallRun): Countertop[] {
   const units = wall.items
-    .filter((i) => carriesCountertop(i) || i.category === 'washing_machine')
+    .filter((i) => (carriesCountertop(i) && fillerCarriesCounter(wall, i)) || i.category === 'washing_machine')
     .sort((a, b) => a.x - b.x);
 
   // 1. Contiguous groups (touching or overlapping).
@@ -294,7 +333,11 @@ export function computeSocketIssues(wall: WallRun): SocketIssue[] {
   for (const s of wall.items.filter((i) => isElectrical(i.category))) {
     const covers = (o: KitchenItem) => overlaps1d(s.x, right(s), o.x, right(o)) && overlaps1d(s.y, top(s), o.y, top(o));
     if (wall.items.some((o) => isOpening(o.category) && covers(o))) issues.push({ item: s, reason: 'opening' });
-    else if (wall.items.some((o) => (o.category === 'upper_cabinet' || o.category === 'tall_cabinet') && covers(o))) {
+    else if (
+      wall.items.some(
+        (o) => (o.category === 'upper_cabinet' || o.category === 'tall_cabinet' || o.category === 'shelf') && covers(o),
+      )
+    ) {
       issues.push({ item: s, reason: 'hidden' });
     }
   }
@@ -302,7 +345,7 @@ export function computeSocketIssues(wall: WallRun): SocketIssue[] {
 }
 
 /** First reachable spot for a new socket: above the countertop if there is one, else along the wall. */
-function findSocketX(wall: WallRun, item: KitchenItem): number {
+function findSocketX(wall: WallRun, item: KitchenItem): number | null {
   const fits = (x: number) => {
     const s = { ...item, x };
     const clash = wall.items.some(
@@ -314,11 +357,14 @@ function findSocketX(wall: WallRun, item: KitchenItem): number {
   for (const [from, to] of ranges) {
     for (let x = from; x + item.width <= to; x += 5) if (fits(x)) return x;
   }
-  return 0;
+  return null;
 }
 
-/** First free horizontal slot on the item's layer that fits it; used when spawning new elements. */
-export function findFreeX(wall: WallRun, item: KitchenItem): number {
+/**
+ * First free horizontal slot on the item's layer that fits it; used when spawning new elements.
+ * Returns null when nothing fits (see `widestGapX` for where to put it anyway).
+ */
+export function findFreeX(wall: WallRun, item: KitchenItem): number | null {
   const layer = layerOf(item.category);
   if (layer === 'electrical') return findSocketX(wall, item);
   if (layer === 'counter') {
@@ -339,7 +385,7 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number {
       }
       if (slab.x + slab.width - cursor >= item.width) return cursor;
     }
-    return 0;
+    return null;
   }
   const blockers = wall.items.filter((o) => canCollide(o, item)).sort((a, b) => a.x - b.x);
   let cursor = 0;
@@ -347,7 +393,48 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number {
     if (b.x - cursor >= item.width) return cursor;
     cursor = Math.max(cursor, right(b));
   }
-  return wall.widthCm - cursor >= item.width ? cursor : 0;
+  return wall.widthCm - cursor >= item.width ? cursor : null;
+}
+
+/** Start of the widest free stretch on the item's layer (clamped so the item stays on the wall). */
+export function widestGapX(wall: WallRun, item: KitchenItem): number {
+  const layer = layerOf(item.category);
+  if (layer === 'counter') {
+    // Only countertop counts: the widest stretch of a slab not taken by other counter items (X 0 if there's none).
+    const taken = itemsInLayer(wall, 'counter').sort((a, b) => a.x - b.x);
+    let best = { x: 0, w: -1 };
+    for (const slab of computeCountertops(wall)) {
+      let cursor = slab.x;
+      for (const c of taken.filter((o) => overlaps1d(o.x, right(o), slab.x, slab.x + slab.width))) {
+        if (c.x - cursor > best.w) best = { x: cursor, w: c.x - cursor };
+        cursor = Math.max(cursor, right(c));
+      }
+      if (slab.x + slab.width - cursor > best.w) best = { x: cursor, w: slab.x + slab.width - cursor };
+    }
+    return clampX(wall, item, best.x);
+  }
+  const blockers = wall.items
+    .filter((o) => (layer === 'floor' || layer === 'upper' ? canCollide(o, item) : layerOf(o.category) === layer))
+    .sort((a, b) => a.x - b.x);
+  let best = { x: 0, w: -1 };
+  let cursor = 0;
+  for (const b of blockers) {
+    if (b.x - cursor > best.w) best = { x: cursor, w: b.x - cursor };
+    cursor = Math.max(cursor, right(b));
+  }
+  if (wall.widthCm - cursor > best.w) best = { x: cursor, w: wall.widthCm - cursor };
+  return clampX(wall, item, best.x);
+}
+
+/** Counter items (sink, cooktop…) standing on each floor unit (keyed by unit id), so they can move with it. */
+export function countersOnUnits(run: WallRun): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const c of run.items.filter((i) => layerOf(i.category) === 'counter')) {
+    const cx = c.x + c.width / 2;
+    const host = run.items.find((u) => layerOf(u.category) === 'floor' && u.depth > 0 && u.x <= cx && right(u) >= cx);
+    if (host) out.set(host.id, [...(out.get(host.id) ?? []), c.id]);
+  }
+  return out;
 }
 
 /** One fridge door, as fractions of the fridge front (x from its left edge, y up from its bottom). */

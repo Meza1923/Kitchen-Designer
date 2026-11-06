@@ -54,12 +54,12 @@ const TRIANGLE = [120, 270] as const; // R17
 const right = (i: KitchenItem) => i.x + i.width;
 
 /** A fix that puts a filler of `width` against the corner obstacle (wall or perpendicular fronts) at corner `c`. */
-const cornerFiller = (c: Corner, obstacle: number, width: number) => ({
+const cornerFiller = (c: Corner, obstacle: number, width: number, serves: KitchenItem) => ({
   label: `Add ${width} cm filler`,
   apply: (data: ProjectData) =>
     c.end === 'start'
-      ? insertFiller(data, c.run.id, obstacle, width, 'end')
-      : insertFiller(data, c.run.id, c.run.widthCm - obstacle, width, 'start'),
+      ? insertFiller(data, c.run.id, obstacle, width, 'end', serves)
+      : insertFiller(data, c.run.id, c.run.widthCm - obstacle, width, 'start', serves),
 });
 const isTall = (i: KitchenItem) => i.category === 'tall_cabinet' || i.category === 'fridge';
 const ofCategory = (run: WallRun, ...cats: KitchenItem['category'][]) =>
@@ -102,7 +102,7 @@ const R1: Rule = {
               `${at(c.run, i)} opens into the corner ${fmt(Math.max(0, clearance))} cm from ${itemName(other)} on ${c.neighbour.name}: add a filler of at least ${CORNER_FILLER} cm so the handles clear.`,
               {
                 items: [ref(c.run, i), ref(c.neighbour, other)],
-                fix: cornerFiller(c, depth, CORNER_FILLER),
+                fix: cornerFiller(c, depth, CORNER_FILLER, i),
               },
             ),
           ];
@@ -130,7 +130,7 @@ const R2: Rule = {
               `${at(c.run, i)} is hinged ${fmt(Math.max(0, gap))} cm from the ${obstacle ? 'units' : 'wall'} on ${c.neighbour.name}: leave ${HINGE_GAP[0]}–${HINGE_GAP[1]} cm so the door opens past 90°.`,
               {
                 items: [ref(c.run, i)],
-                fix: cornerFiller(c, obstacle, HINGE_GAP[1]),
+                fix: cornerFiller(c, obstacle, HINGE_GAP[1], i),
               },
             ),
           ];

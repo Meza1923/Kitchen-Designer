@@ -156,6 +156,7 @@ export function WallBar({
             value={room.widthCm}
             min={100}
             max={2000}
+            commitOnBlur
             onChange={(widthCm) => onUpdateRoom({ widthCm })}
           />
         </Setting>
@@ -165,6 +166,7 @@ export function WallBar({
             value={room.depthCm}
             min={100}
             max={2000}
+            commitOnBlur
             onChange={(depthCm) => onUpdateRoom({ depthCm })}
           />
         </Setting>
@@ -174,6 +176,7 @@ export function WallBar({
             value={room.heightCm}
             min={150}
             max={500}
+            commitOnBlur
             onChange={(heightCm) => onUpdateRoom({ heightCm })}
           />
         </Setting>

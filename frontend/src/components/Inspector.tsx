@@ -27,6 +27,7 @@ import {
   isCounterBearing,
   isElectrical,
   isWallMounted,
+  isWallOnly,
   layerOf,
   round1,
 } from '../lib/geometry';
@@ -40,6 +41,7 @@ export function NumField({
   disabled,
   suffix = 'cm',
   className = '',
+  commitOnBlur = false,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -49,6 +51,8 @@ export function NumField({
   disabled?: boolean;
   suffix?: string;
   className?: string;
+  /** Apply only on Enter / leaving the field, not while typing (for edits that move many things, like the room size). */
+  commitOnBlur?: boolean;
 }) {
   const [draft, setDraft] = useState(String(round1(value)));
   const [focused, setFocused] = useState(false);
@@ -82,7 +86,7 @@ export function NumField({
         }}
         onChange={(e) => {
           setDraft(e.target.value);
-          commit(e.target.value, false);
+          if (!commitOnBlur) commit(e.target.value, false);
         }}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
@@ -378,7 +382,7 @@ export function Inspector({
         <Field label="Wall / run">
           <select className="field" value={wall.id} onChange={(e) => onMoveToWall(e.target.value)}>
             {walls
-              .filter((w) => !w.removed && (!isWallMounted(item.category) || w.kind === 'wall'))
+              .filter((w) => !w.removed && (!isWallOnly(item.category) || w.kind === 'wall'))
               .map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name} · {w.kind === 'wall' ? SIDE_LABELS[w.side ?? 'north'] : 'Island'}

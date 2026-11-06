@@ -19,9 +19,10 @@ You are the **developer** on this project. Gemini is the **reviewer** (see `GEMI
 1. **New feature request:** add it to `FEATURES.md` (next number, size, status `Planned`) with a short What / Done when, and a dated change-log line. Do this before writing code.
 2. **Unclear point or design choice:** don't guess on anything that is hard to undo. Add a question to `ISSUES.md` → Open questions, with options and your recommendation, set it to `Awaiting owner`, and tell the owner. For small reversible choices, pick a sensible default, record it as an Implementation Assumption, and carry on.
 3. **Build:** work on a feature branch (`feat/<n>-<slug>` or `fix/<n>-<slug>`), never directly on `main`. Commit only when the owner asks.
-4. **Before handing off:** run all checks (below). Set the feature to `In review` in `FEATURES.md` and write a short handoff in its details: branch name, what changed, how to check it in the app, known limits.
-5. **After review:** read the reviewer's findings in `ISSUES.md` → Review findings. Fix each one or answer why not (`Won't fix` + reason). The owner settles disagreements.
-6. **Answered questions:** before starting work, read any question set to `Decided` and apply it: record it in `PROJECT.md` / `FEATURES.md`, then set the question to `Applied`.
+4. **Before handing off:** run all checks (below). Set the feature (or known issue) to `In review` and write a short handoff: branch name, what changed, how to check it in the app, known limits. Then end your message with a clear signal: **"Ready for Gemini review: `<branch>`"**. The owner triggers Gemini from there.
+5. **After review:** read the reviewer's findings in `ISSUES.md` → Review findings. Fix each one or answer why not (`Won't fix` + reason). The owner settles disagreements. When you've answered them, signal again: "Ready for Gemini review: `<branch>`".
+6. **Owner check, then commit:** Gemini tells the owner when to check the app. Only after the owner says the cycle passed, commit and merge the branch into `main` (no pull request for now; pull requests to `main` come later), and set the status to `Done`.
+7. **Answered questions:** before starting work, read any question set to `Decided` and apply it: record it in `PROJECT.md` / `FEATURES.md`, then set the question to `Applied`.
 
 ## Checks before handoff
 

@@ -160,6 +160,12 @@ Notes and limits:
 
 **Data:** new `shelf` element type; `frontType` gains `'open'`; new optional `shelfCount` field, on both frontend and backend. 5 tests.
 
+**After review (2026-11-06):**
+- The open wall shelf is a floating shelf (concealed fixings), allowed on walls only.
+- A shelf over a socket flags SOCKET HIDDEN.
+- Upper-layer gap warnings compare only items at the same height.
+- The 3D panel has a "Shelves inside" control.
+
 **Not included:** shelves inside the door zones of a tall cabinet. The tall cabinet's "Open shelf" zone already exists.
 
 ### 8. Hebrew and English interface
@@ -200,3 +206,4 @@ Notes and limits:
 - 2026-11-04: #7 shelves implemented (open wall shelf, internal shelves, open cabinets); checked by rendering the elevation. #8 (Hebrew/English) and #9 (island) added; scope to agree.
 - 2026-11-04: Decisions for #8: translate everything, toggle remembered per browser, Claude drafts and the owner reviews the Hebrew terms, RTL interface without mirrored drawings. #9 scope: two-sided island, seating overhang (R13), front marker.
 - 2026-11-06: Added the `In review` status and the intake/handoff process (developer Claude, reviewer Gemini).
+- 2026-11-06: #7 review findings R1–R4 fixed on `fix/13-15-placement`: floating shelf, walls only, socket check, gaps per height band, shelves control in 3D.

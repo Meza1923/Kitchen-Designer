@@ -402,18 +402,10 @@ function addItem(
       addPanels(b, group, f, d, item, run, frontPanels(item, a0, a1, y0 + tk, y0 + tk + boxHeight(item)));
       return;
     }
-    case 'shelf': {
-      // Open wall shelf: a board on two brackets.
+    case 'shelf':
+      // Open wall shelf: a floating board (concealed fixings).
       b.box(group, localRect(f, a0, a1, 0, d), y0, y1, C.front, o);
-      for (const fx of [0.15, 0.85]) {
-        const bx = a0 + (a1 - a0) * fx;
-        b.box(group, localRect(f, bx - 0.6, bx + 0.6, 0, d * 0.7), y0 - Math.min(12, d * 0.5), y0, C.handle, {
-          ...o,
-          edges: false,
-        });
-      }
       return;
-    }
     case 'filler': {
       // A plain panel flush with the cabinet fronts.
       const tk = item.hasToeKick ? item.toeKickHeight : 0;

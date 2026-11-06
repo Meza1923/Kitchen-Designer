@@ -460,27 +460,14 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
         </g>
       );
     }
-    case 'shelf': {
-      // Open wall shelf: the board with two brackets underneath.
-      const bracket = Math.max(5, Math.min(ob.w * 0.12, 4 * S));
+    case 'shelf':
+      // Open wall shelf: a floating board on concealed fixings, so nothing is drawn outside its outline.
       return (
         <g>
           <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} fill="#f1f5f9" stroke={INK} strokeWidth={1.5} />
-          {[0.15, 0.85].map((f) => {
-            const bx = ob.x + ob.w * f;
-            return (
-              <path
-                key={f}
-                d={`M ${bx} ${ob.y + ob.h} v ${bracket} l ${bracket * 0.8} ${-bracket} Z`}
-                fill="none"
-                stroke={INK}
-                strokeWidth={1.25}
-              />
-            );
-          })}
+          <line x1={ob.x + 2} y1={ob.y + ob.h / 2} x2={ob.x + ob.w - 2} y2={ob.y + ob.h / 2} {...HIDDEN} />
         </g>
       );
-    }
     case 'filler': {
       // A plain panel flush with the cabinet fronts: no doors, no handle.
       const { outer, plinth } = frontsBox(item, ctx);

@@ -2,6 +2,8 @@ import type { KitchenItem, ProjectData, Room, WallRun } from '../types';
 import {
   canCollide,
   computeCountertops,
+  computeOverlaps,
+  countersOnUnits,
   carriesCountertop,
   layerOf,
   normalizeWall,
@@ -154,20 +156,76 @@ export function computePlanConflicts(data: ProjectData): PlanConflict[] {
   return conflicts;
 }
 
-/** Re-derive wall lengths and ceiling heights from the room, then re-normalize every run. */
+/**
+ * Make a run's units fit a shorter length without piling them up: per layer, walking from the far end, each unit
+ * moves back only as far as needed to clear the end of the wall and the unit after it (order is kept). Counter
+ * items move with the unit they stand on. Units overlap only when the layer truly doesn't fit.
+ */
+function fitToLength(run: WallRun, length: number): WallRun {
+  if (length >= run.widthCm) return run;
+  const end = (i: KitchenItem) => i.x + i.width;
+  const shift = new Map<string, number>();
+  // Walking from the far end, each unit stops at the wall end or at the new position of a unit to its right that it
+  // can actually collide with (same height band, or a tall unit vs. a wall cabinet / window).
+  const placed: { item: KitchenItem; x: number }[] = [];
+  const units = run.items.filter((i) => ['floor', 'upper'].includes(layerOf(i.category)));
+  for (const u of units.sort((a, b) => end(b) - end(a))) {
+    const limit = Math.min(length, ...placed.filter((p) => p.item.x >= u.x && canCollide(u, p.item)).map((p) => p.x));
+    const x = Math.max(0, Math.min(u.x, limit - u.width));
+    if (x !== u.x) shift.set(u.id, x - u.x);
+    placed.push({ item: u, x });
+  }
+  for (const [host, ids] of countersOnUnits(run))
+    for (const id of ids) if (shift.has(host)) shift.set(id, shift.get(host)!);
+  return { ...run, items: run.items.map((i) => (shift.has(i.id) ? { ...i, x: i.x + shift.get(i.id)! } : i)) };
+}
+
+/** Re-derive wall lengths and ceiling heights from the room, then re-normalize every run. Islands that fit are
+ * kept inside the room. */
 export function syncRoom(data: ProjectData): ProjectData {
   const { room } = data;
   return {
     ...data,
-    walls: data.walls.map((w) =>
-      normalizeWall({
-        ...w,
-        heightCm: room.heightCm,
-        widthCm:
-          w.kind === 'wall' ? (w.side === 'north' || w.side === 'south' ? room.widthCm : room.depthCm) : w.widthCm,
-      }),
-    ),
+    walls: data.walls.map((w) => {
+      const widthCm =
+        w.kind === 'wall' ? (w.side === 'north' || w.side === 'south' ? room.widthCm : room.depthCm) : w.widthCm;
+      let run: WallRun = { ...fitToLength(w, widthCm), heightCm: room.heightCm, widthCm };
+      if (run.kind === 'island') {
+        const r = islandRect(run);
+        if (r.w <= room.widthCm && r.h <= room.depthCm) {
+          run = {
+            ...run,
+            planX: Math.min(Math.max(0, r.x), room.widthCm - r.w),
+            planY: Math.min(Math.max(0, r.y), room.depthCm - r.h),
+          };
+        }
+      }
+      return normalizeWall(run);
+    }),
   };
+}
+
+/** Plain-language consequences of changing the room from `before` to `after` (empty when nothing breaks). */
+export function roomChangeWarnings(before: ProjectData, after: ProjectData): string[] {
+  const out: string[] = [];
+  for (const run of after.walls) {
+    const old = before.walls.find((w) => w.id === run.id);
+    if (!old || (run.kind === 'wall' && run.removed)) continue;
+    const pairs = (r: WallRun) => new Set(computeOverlaps(r).map((o) => `${o.a}|${o.b}`));
+    const was = pairs(old);
+    const added = computeOverlaps(run).filter((o) => !was.has(`${o.a}|${o.b}`));
+    if (added.length) {
+      const n = new Set(added.flatMap((o) => [o.a, o.b])).size;
+      out.push(`${run.name} becomes ${round1(run.widthCm)} cm: ${n} of its elements no longer fit and will overlap.`);
+    }
+    if (run.kind === 'island') {
+      const inside = (d: ProjectData, r: Rect) =>
+        r.x >= 0 && r.y >= 0 && r.x + r.w <= d.room.widthCm && r.y + r.h <= d.room.depthCm;
+      if (inside(before, islandRect(old)) && !inside(after, islandRect(run)))
+        out.push(`${run.name} no longer fits in the room.`);
+    }
+  }
+  return out;
 }
 
 export const snapTo = (v: number, step: number) => round1(Math.round(v / step) * step);

@@ -29,7 +29,7 @@ When a feature in `FEATURES.md` is `In review`, review its branch with `git diff
 - Frontend/backend schema drift, and migration of older saved projects
 - Anything unsafe for the VM deployment target (auth, secrets, exposed ports)
 
-Log each finding in `ISSUES.md` → **Review findings** with a severity (`High` / `Medium` / `Low`), the file and line, and a concrete failure scenario (input → wrong result). Leave out style nitpicks that lint already covers. When you're done, tell the owner how many findings you logged and whether the feature can be merged.
+Log each finding in `ISSUES.md` → **Review findings** with a severity (`High` / `Medium` / `Low`), the file and line, and a concrete failure scenario (input → wrong result). Leave out style nitpicks that lint already covers. When you're done, tell the owner how many findings you logged. When there are no open findings left (all `Fixed` or settled), tell the owner it's **ready for them to check in the app**, and point to the handoff's "How to check in the app" steps. If findings are still open, tell the owner to send them back to Claude first.
 
 ### 3. Recommend skills for Claude and Gemini
 

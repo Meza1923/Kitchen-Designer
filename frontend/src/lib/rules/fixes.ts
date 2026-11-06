@@ -4,22 +4,13 @@
  */
 import type { KitchenItem, ProjectData, WallRun } from '../../types';
 import { createItem } from '../defaults';
-import { fmt, layerOf, normalizeWall } from '../geometry';
+import { countersOnUnits, fmt, layerOf, normalizeWall } from '../geometry';
 import type { End } from './core';
 
 const right = (i: KitchenItem) => i.x + i.width;
 const isFloor = (i: KitchenItem) => layerOf(i.category) === 'floor' && i.depth > 0;
 
-/** Counter items (sink, cooktop…) standing on each floor unit, so they move with it. */
-function riders(run: WallRun): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const c of run.items.filter((i) => layerOf(i.category) === 'counter')) {
-    const cx = c.x + c.width / 2;
-    const host = run.items.find((u) => isFloor(u) && u.x <= cx && right(u) >= cx);
-    if (host) out.set(host.id, [...(out.get(host.id) ?? []), c.id]);
-  }
-  return out;
-}
+const riders = countersOnUnits;
 
 const replaceRun = (data: ProjectData, run: WallRun): ProjectData => ({
   ...data,
@@ -97,6 +88,8 @@ export function insertFiller(
   edge: number,
   width: number,
   away: End,
+  /** The unit the filler serves: it takes its height, depth and plinth (a fridge gets a full-height filler). */
+  serves?: KitchenItem,
 ): ProjectData | string {
   const run = data.walls.find((w) => w.id === runId);
   if (!run) return 'that run no longer exists';
@@ -115,7 +108,17 @@ export function insertFiller(
     pushed = pushClear(narrowed, x0, x1, away);
     if (typeof pushed === 'number') return `not enough room on ${run.name}: it needs ${fmt(pushed)} cm more`;
   }
-  const filler: KitchenItem = { ...createItem('filler'), x: x0, width };
+  const filler: KitchenItem = {
+    ...createItem('filler'),
+    x: x0,
+    width,
+    ...(serves && {
+      height: serves.height,
+      depth: serves.depth,
+      hasToeKick: serves.hasToeKick,
+      toeKickHeight: serves.toeKickHeight,
+    }),
+  };
   return replaceRun(data, { ...pushed, items: [...pushed.items, filler] });
 }
 
