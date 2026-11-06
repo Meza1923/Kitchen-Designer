@@ -10,6 +10,9 @@ Three sections, each with its own owner:
 
 | Q# | Question | Options | Developer recommends | Reviewer view | Owner decision (date) | Status |
 |---|---|---|---|---|---|---|
+| Q1 | #6 Room shapes: how does the designer create and change a non-rectangular room? | **A.** Shape presets (Rectangle, L-shape, U-shape) with a dimension field per wall. **B.** A wall list where you edit each wall's length and turn direction, so any shape is possible. **C.** Drag the room's corners in the plan. Options can be combined. | **A + B now, C later.** Presets get you to an L or U in one click; the wall list gives full control with exact centimetres, which suits a technical tool. Dragging corners (C) is nice to have but is the most work; do it as a follow-up. | **Agree with A + B now, C later.** One concrete risk with **B**: a room outline must always stay closed ($\sum \Delta x = 0, \sum \Delta y = 0$) and non-self-intersecting, so editing one wall's length in the list must auto-adjust a parallel closing wall (or the final two legs) rather than letting the outline break open. | **A + B now (C later):** Shape presets (Rectangle, L, U) + editable wall list that auto-closes the outline; corner dragging later (2026-11-06) | Decided |
+| Q2 | #6 Room shapes: how are columns, pipe boxes and niches represented? | **A.** As part of the room outline: each face of a column or niche becomes its own short wall, with its own tab and elevation. **B.** As a separate **column / box element** placed on a wall (any width, depth, height), which blocks cabinets and shows in plan, elevation and 3D; the outline stays simple. **C.** Both: niches through the outline, columns and boxes as an element. | **C.** Most real cases are pipe boxes and columns standing against a wall; as an element they are one click, can be any height (a box above the counter), and don't flood the tabs with 30 cm walls. A real recess in the wall (niche) still fits naturally in the outline. | **Agree with C.** In the codebase (`WallBar.tsx`, `computeCountertops`, `design.ts`), modelling a 20×20 cm pipe box via the outline (**A**) would split one wall into 4 wall runs/tabs, breaking continuous elevations and single-run rules (R7, R15). Making columns/pipe boxes a wall element (with configurable width, depth, Y and height) keeps the wall continuous, while wall recesses (niches) are naturally outline steps. | **C:** Niches as part of the room outline; columns and pipe boxes as a wall element with configurable width, depth, Y, and height (2026-11-06) | Decided |
+| Q3 | #6 Room shapes: what happens to wall names? | **A.** Letters clockwise from the top-left corner (Wall A, B, C, …); compass labels (North/East/…) are dropped for non-rectangular rooms. **B.** Letters plus a compass direction on every wall (an L-shaped room has two "north" walls: "North 1", "North 2"). **C.** Letters only, for every room including rectangles. | **A.** Existing rectangular projects keep "Wall A · North" exactly as now, and new shapes get clear letters without confusing duplicate directions. Walls can still be renamed. | **Agree with A** (with wall length `400 cm` shown in the tab/Inspector subtitle where the compass direction sits when compass labels are dropped, or **C** if you prefer showing `Wall A · 400 cm` consistently on all rooms). Avoid **B**: `"North 1"` / `"North 2"` is confusing and harder to translate cleanly in #8 (Hebrew/English). | **B:** Letters plus numbered compass directions on every wall (e.g. "North 1", "North 2" in an L-shaped room) (2026-11-06) | Decided |
 
 ## Review findings
 
@@ -52,8 +55,8 @@ Found by driving the app in a browser: adding every element type, dragging, the 
 | 14 | Shrinking the room squeezes cabinets on top of each other without warning | High | Done | Room width 400 → 100: two 60 cm cabinets were clamped into 100 cm and overlap by 20 cm. The island is left outside the room. Found during the fix: the room fields applied values while typing, so typing 1000 passed through 100 and squeezed everything permanently. |
 | 15 | A filler added by a fix next to a fridge or tall cabinet is base-height (87 cm), and gets its own countertop sliver | High | Done | R2 fix on Wall B: a 10 cm filler between the wall and a 185 cm fridge, with a "COUNTERTOP 10" slab on it. The filler should match the height of the unit it serves, and a filler with no base unit beside it shouldn't carry a countertop. |
 | 16 | The project-wide problems list is hard to find and mislabelled | Medium | Open | It shows only when nothing is selected, but every newly added element is auto-selected, so it's usually hidden. It sits under the heading "Wall A · Schedule" although it covers the whole project. The red and amber counts have no labels. |
-| 17 | R14 "wall to wall" fires, with a fix button, on a run whose cabinets overlap | Medium | Open | After a room shrink, overlapping cabinets counted as "wall to wall". The scribe fix would narrow a cabinet in an already broken run. |
-| 18 | Load dialog: clicking a project's name does nothing; only the small "Open" button loads it | Medium | Open | The whole row highlights on hover, so it looks clickable. |
+| 17 | R14 "wall to wall" fires, with a fix button, on a run whose cabinets overlap | Medium | Done | After a room shrink, overlapping cabinets counted as "wall to wall". The scribe fix would narrow a cabinet in an already broken run. |
+| 18 | Load dialog: clicking a project's name does nothing; only the small "Open" button loads it | Medium | Done | The whole row highlights on hover, so it looks clickable. |
 | 19 | Auto-placement puts the sink and cooktop side by side | Medium | Open | Adding a sink, then a cooktop, puts them on neighbouring cabinets, which immediately triggers R7 (sink-to-cooktop) and R17 (triangle). Placement could keep the clearances the rules ask for. |
 | 20 | The ✕ on a wall tab removes the wall, but looks like "close tab" | Medium | Open | It asks for confirmation and offers "Restore Wall A", so nothing is lost. But next to the rename pencil, ✕ reads as closing the view. |
 | 21 | An island shows no front side in the plan | Low | Open | It's a plain dashed rectangle, so you can't tell which way its cabinets will face before adding them. |
@@ -99,6 +102,30 @@ Found by driving the app in a browser: adding every element type, dragging, the 
 - The confirmation is the browser's own dialog, like the existing "remove wall" confirmation.
 - #17 (R14 firing on overlapping runs) still applies when you accept a shrink that leaves overlaps.
 
+#### Handoff: `fix/17-18-small-fixes` (2026-11-06)
+
+**#17 R14 on overlapping runs:** `R14` (`lib/rules/design.ts`) no longer fires when a run's floor units overlap each other. The overlap is the real problem and is already flagged in red, and the scribe fix would only narrow a cabinet in a broken run. Once the overlap is resolved, R14 checks the run as before. A test is in `lib/rules/design.test.ts`.
+
+**#18 Load dialog:**
+- Clicking anywhere on a project's row opens it (`components/LoadModal.tsx`).
+- The row can also be reached with Tab and opened with Enter or Space.
+- The Open and Delete buttons still work on their own, and Delete still asks for confirmation.
+
+**How to check in the app:**
+- **#18:** save a project, click New, open Load Project and click the project's **name**. It loads and the dialog closes.
+- **#17:** fill a wall with base cabinets, then drag one onto its neighbour. Only OVERLAP is reported, with no "No scribe allowance" problem and no scribe-filler button.
+
+**Checked:**
+- All checks pass: 125 frontend tests, typecheck, lint (0 errors), format, build, pytest, Ruff.
+- **#18 was checked in the running app** with the Playwright MCP tools, against the isolated copy (ports 8765/5199, throwaway database). Saved a project, clicked New, then clicked its name in the Load dialog: the project loaded and the dialog closed, with no console errors.
+- #17 was checked by a unit test.
+
+**Also on this branch:**
+- `.gitignore` ignores `.playwright-mcp/`, the Playwright MCP output.
+- The tooling from the SKILLS #1–#3 setup, which wasn't committed yet: `.mcp.json`, `.claude/`, `.gemini/`, and the `CLAUDE.md` / `SKILLS.md` changes.
+
+**Known limits:** none.
+
 Checked and working: dragging (with live red overlap feedback), Inspector width/position edits, Delete, undo/redo, the R2 one-click filler (adds the filler, shifts the fridge, clears the problem), save and load, removing and restoring a wall, adding an island, PNG export (elevation or plan, matching the view), Print/PDF and JSON export. No console errors in any session.
 
 ## Change log
@@ -117,3 +144,8 @@ Checked and working: dragging (with live red overlap feedback), Inspector width/
 - 2026-11-06: Answered review findings R5–R7 (`fix/13-15-placement`): all fixed. Back to the reviewer.
 - 2026-11-06: Verified R5–R7 fixes on `fix/13-15-placement`; 0 open findings remain — ready for owner check in the app.
 - 2026-11-06: Owner confirmed the review cycle for `fix/13-15-placement`. #13, #14 and #15 Done; branch merged into `main`.
+- 2026-11-06: Asked Q1–Q3 for feature #6 (room shapes): how to create shapes, how to represent columns and niches, and wall naming.
+- 2026-11-06: Added Reviewer view and recorded Owner decisions for Q1–Q3 (#6 room shapes): Q1 = A + B now (C later), Q2 = C, Q3 = B.
+- 2026-11-06: #17 and #18 fixed on `fix/17-18-small-fixes` and set to `In review` (handoff below the UI review table).
+- 2026-11-06: Reviewed `fix/17-18-small-fixes` (#17, #18): 0 findings; ready for owner check in the app.
+- 2026-11-06: Owner asked to commit `fix/17-18-small-fixes`: #17 and #18 Done, merged into `main`.

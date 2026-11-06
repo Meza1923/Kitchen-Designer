@@ -33,6 +33,18 @@ cd backend && .venv/bin/pytest && .venv/bin/ruff check . && .venv/bin/ruff forma
 
 If the data model changed, regenerate the OpenAPI types (steps in `README.md`). For UI changes, also check the result in the running app or by rendering it, and say in the handoff which one you did.
 
+## Checking the app
+
+Use the Playwright MCP server (`.mcp.json`) to drive the app in a browser, and only against an **isolated copy**: its own ports and a throwaway SQLite database. The owner's Docker app on ports 5173/8000 holds real projects, so never point a browser or a script at it.
+
+```bash
+# backend on 8765 with a throwaway database, frontend on 5199 proxying to it
+cd backend && DATABASE_URL=sqlite:////tmp/kitchen-review.db .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8765 &
+cd frontend && VITE_PROXY_TARGET=http://127.0.0.1:8765 npx vite --host 127.0.0.1 --port 5199 --strictPort &
+```
+
+Then open `http://127.0.0.1:5199`. Before handing off, use `/handoff` to run all checks and write the handoff.
+
 ## Rules
 
 - Keep the tracking files current in the same turn as the work. Don't wait to be asked.

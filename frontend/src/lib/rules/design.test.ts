@@ -265,3 +265,14 @@ describe('R11 at the end of a run', () => {
     expect(severities(project({ north: [{ x: 100 }, { category: 'sink', x: 130 }] }), 'R11')).toEqual([]);
   });
 });
+
+describe('R14 on overlapping runs (issue #17)', () => {
+  it('does not fire, or offer a scribe fix, when the run overlaps itself', () => {
+    const units: Partial<KitchenItem>[] = [];
+    for (let x = 0; x + 60 <= 400; x += 60) units.push({ x });
+    units.push({ x: 340 }, { x: 330 }); // 330–390 overlaps the unit at 300–360 and the one at 340
+    const data = project({ north: units });
+    expect(found(data, 'R14')).toEqual([]);
+    expect(found(data, 'overlap').length).toBeGreaterThan(0);
+  });
+});

@@ -54,7 +54,17 @@ export function LoadModal({ currentId, onOpen, onClose, onDeleted }: Props) {
           {projects?.map((p) => (
             <div
               key={p.id}
-              className={`flex items-center gap-3 rounded px-3 py-2 hover:bg-slate-50 ${p.id === currentId ? 'bg-blue-50' : ''}`}
+              role="button"
+              tabIndex={0}
+              title={`Open "${p.name}"`}
+              onClick={() => onOpen(p.id)}
+              onKeyDown={(e) => {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  onOpen(p.id);
+                }
+              }}
+              className={`flex cursor-pointer items-center gap-3 rounded px-3 py-2 hover:bg-slate-50 ${p.id === currentId ? 'bg-blue-50' : ''}`}
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{p.name}</div>
@@ -62,10 +72,23 @@ export function LoadModal({ currentId, onOpen, onClose, onDeleted }: Props) {
                   updated {new Date(p.updated_at).toLocaleString()}
                 </div>
               </div>
-              <button className="btn" onClick={() => onOpen(p.id)}>
+              <button
+                className="btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(p.id);
+                }}
+              >
                 <FolderOpen size={14} /> Open
               </button>
-              <button className="btn text-red-600 hover:bg-red-50" title="Delete" onClick={() => remove(p)}>
+              <button
+                className="btn text-red-600 hover:bg-red-50"
+                title="Delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  remove(p);
+                }}
+              >
                 <Trash2 size={14} />
               </button>
             </div>

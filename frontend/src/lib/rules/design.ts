@@ -443,6 +443,9 @@ const R14: Rule = {
       .flatMap((run) => {
         const units = floorUnits(run).sort((a, b) => a.x - b.x);
         if (!units.length || units[0].x > 0.5) return [];
+        // Overlapping units aren't "wall to wall": the overlap is the real problem (flagged on its own), and a
+        // scribe filler would only narrow a cabinet in an already broken run (issue #17).
+        if (units.some((u, k) => k > 0 && u.x < right(units[k - 1]) - 0.5)) return [];
         let reach = 0;
         for (const u of units) {
           if (u.x > reach + 0.5) return [];

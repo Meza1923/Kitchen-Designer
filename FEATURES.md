@@ -151,6 +151,21 @@ Notes and limits:
 
 **Decided:** Any room outline with 90° corners. This includes L- and U-shaped rooms and columns or niches. Angled walls are out of scope for now.
 
+**Open questions:** Q1–Q3 in `ISSUES.md` (how shapes are created, columns and niches, wall names). Building starts once they're decided.
+
+**Developer defaults (recorded as Implementation Assumptions when built):**
+- **Storage:** the room outline is stored as its corner points, clockwise, with walls derived from it.
+- **Existing projects:** they convert automatically on load. A rectangle becomes a 4-corner outline, and nothing changes visually.
+- **Outside corners:** the corner of an L that points into the room. A run ends there, and the rules treat that end as open, because there's no wall beside it to hinge against or scribe to.
+- **Corner rules and fillers** use the run-end helper built in #5, which now understands any outline. R1, R2, R14 and R18 work unchanged.
+
+**Done when:**
+- An L-shaped and a U-shaped room can be created and resized.
+- Every wall has its own elevation.
+- Plan, 3D, exports and rules all handle the new shapes.
+- Old projects load unchanged.
+- Tests cover the outline geometry and the migration.
+
 ### 7. Shelves
 
 **What:** three kinds of shelf.
@@ -207,3 +222,4 @@ Notes and limits:
 - 2026-11-04: Decisions for #8: translate everything, toggle remembered per browser, Claude drafts and the owner reviews the Hebrew terms, RTL interface without mirrored drawings. #9 scope: two-sided island, seating overhang (R13), front marker.
 - 2026-11-06: Added the `In review` status and the intake/handoff process (developer Claude, reviewer Gemini).
 - 2026-11-06: #7 review findings R1–R4 fixed on `fix/13-15-placement`: floating shelf, walls only, socket check, gaps per height band, shelves control in 3D.
+- 2026-11-06: #6 scoped; Q1–Q3 asked in `ISSUES.md`; developer defaults listed.

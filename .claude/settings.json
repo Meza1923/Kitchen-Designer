@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // .tool_response.filePath'); case \"$f\" in */backend/app/schemas.py) (cd \"$CLAUDE_PROJECT_DIR/backend\" && .venv/bin/python -m app.export_openapi ../frontend/src/generated/openapi.json && cd ../frontend && npm run -s gen:api) >/dev/null 2>&1 && echo '{\"systemMessage\": \"Schema changed: regenerated frontend/src/generated (openapi.json, api.ts)\"}' || echo '{\"systemMessage\": \"Schema changed but regenerating the API types FAILED: run the steps in README (Changing the data model)\"}' ;; esac",
+            "timeout": 120,
+            "statusMessage": "Regenerating API types from schemas.py"
+          }
+        ]
+      }
+    ]
+  }
+}

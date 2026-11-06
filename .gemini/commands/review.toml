@@ -1,0 +1,19 @@
+description = "Review a branch against PROJECT.md, FEATURES.md and ISSUES.md. Usage: /review <branch>"
+
+prompt = """
+You are the reviewer on this project. Follow GEMINI.md, "Your three jobs", job 2 ("Review the developer's work").
+
+Branch under review: {{args}}
+
+Changed files:
+!{git diff --stat main...{{args}}}
+
+Full diff:
+!{git diff main...{{args}}}
+
+Steps:
+1. Read the branch's handoff (the feature in FEATURES.md, or the known issue in ISSUES.md, that is `In review`), with its "Done when" criteria.
+2. Review the diff above for correctness bugs and edge cases (empty and full walls, corners, islands, rotated islands, removed walls), breaks of PROJECT.md rules or Resolved Decisions, missing tests for new logic in lib/, frontend/backend schema drift, migration of older saved projects, and anything unsafe for the VM deployment.
+3. Log each finding in ISSUES.md, under Review findings, with severity, file:line and a concrete failure scenario (input → wrong result). Skip style nitpicks that lint already covers.
+4. Tell the owner how many findings you logged. If none are left open, tell them the branch is ready for them to check in the app, and point to the handoff's "How to check in the app" steps.
+"""
