@@ -4,7 +4,7 @@ Three sections, each with its own owner:
 
 - **Open questions:** the developer (Claude) asks, the reviewer (Gemini) adds a second opinion, the product owner decides, and the reviewer writes down the decision. Status: `Awaiting owner` → `Decided` → `Applied` (applied by the developer).
 - **Review findings:** the reviewer logs them, and the developer fixes or answers them. Status: `Open` · `Fixed` · `Won't fix` (with a reason) · `Owner to decide`.
-- **Known issues:** bugs and tech debt, logged by either agent. Status: `Open` · `In progress` · `Done` · `Deferred`.
+- **Known issues:** bugs and tech debt, logged by either agent. Status: `Open` · `In progress` · `In review` (fixed on a branch, waiting for review) · `Done` · `Deferred`.
 
 ## Open questions
 
@@ -15,6 +15,10 @@ Three sections, each with its own owner:
 
 | R# | Feature / branch | Severity | File:line | Finding and failure scenario | Developer response | Status |
 |---|---|---|---|---|---|---|
+| R1 | #7 Shelves (`82a9ec9`) | Medium | `frontend/src/lib/geometry.ts:162` | `computeGaps(wall, 'upper')` sorts all upper-layer items along 1D `x` without checking vertical overlap. Input: `upper_cabinet` at `x=0, w=60, y=145, h=70` and `shelf` at `x=65, w=80, y=115, h=4` (26 cm apart vertically, `canCollide` is `false`). Wrong result: reports a false `! GAP: 5.0 cm (<10cm)` (`narrow_gap` warning). Also, stacking two `shelf` items at the same X (`x=10, w=80, y=140` and `y=180`) only checks side-wall gaps for the first shelf's height band. | Fixed on `fix/13-15-placement`. Upper-layer gaps are now measured per item, only against neighbours that overlap it in height and against the walls (`computeGaps`, `lib/geometry.ts`). The reviewer's case (cabinet at 145, shelf at 115) gives no warning; stacked shelves each get their own side gaps, reported once. Two wall cabinets 5 cm apart still warn. Tests in `lib/shelves.test.ts`. | Fixed |
+| R2 | #7 Shelves (`82a9ec9`) | Medium | `frontend/src/components/Inspector.tsx:525`, `frontend/src/components/FrontsPanel.tsx:36` | Switching a cabinet to `'open'` sets `shelfCount` to `1` (base) or `2` (upper) when `shelfCount === undefined`, and switching back to `'doors'` leaves that `shelfCount` on the item instead of restoring the default `0`. Input: click `Open` then `Doors` on a default cabinet (especially in 3D `FrontsPanel`, which has no `Shelves inside` control). Wrong result: the cabinet with doors silently retains 1–2 internal shelves in Elevation and the export schedule. In addition, `FrontsPanel.tsx:45` shows no `Shelves inside` (0–5) selector when `frontType === 'open'` in 3D. | Fixed the missing control: the 3D panel (`FrontsPanel`) now has **Shelves inside (0–5)** for Doors and Open. Kept on purpose: switching Open → Doors keeps the shelves. The shelves belong to the cabinet body, so adding doors doesn't remove them. They stay visible (dashed in the elevation, listed in the schedule) and are editable in both panels. Owner can overrule. | Fixed |
+| R3 | #7 Shelves (`82a9ec9`) | Low | `frontend/src/components/ItemShape.tsx:46`, `frontend/src/lib/scene3d.ts:410` | Shelf brackets are drawn below `y` (`Math.max(5, Math.min(ob.w * 0.12, 4 * S))` px in 2D elevation and `Math.min(12, d * 0.5)` = 12 cm below `y0` in 3D), but `itemBounds`, `clampY`, and `canCollide` only account for the 4 cm board `[y, y + height]`. Input: select or flag a `shelf` in Elevation, or set `shelf` to `y=0` (or directly on top of a window/cabinet at `y = other.y + other.height`). Wrong result: the selection/warning outline cuts through the brackets in 2D, and the brackets protrude below the floor or into the item below in 2D/3D without collision. | Fixed by changing the drawing: the open wall shelf is now a **floating shelf on concealed fixings**, so nothing is drawn outside its outline in the elevation or in 3D. Its outline, collisions and selection frame all match. Recorded as an Implementation Assumption in `PROJECT.md`. | Fixed |
+| R4 | #7 Shelves (`82a9ec9`) | Low | `frontend/src/lib/geometry.ts:46`, `frontend/src/lib/geometry.ts:297` | `shelf` ("Open Wall Shelf") is not in `isWallMounted` (`geometry.ts:46`) or `computeSocketIssues` (`geometry.ts:297`). Input: add or move an `Open Wall Shelf` onto an Island, or place a `shelf` at `y=110, h=4` across a socket (`y=106..114`). Wrong result: in 3D the wall-bracketed shelf floats in mid-air at `y=150 cm` above the island with no wall behind it; on a wall, the shelf board/brackets intersect the socket plate without flagging `SOCKET HIDDEN`. | Fixed. New `isWallOnly` (`lib/geometry.ts`) = wall-mounted items + open wall shelves. It is used to refuse adding a shelf to an island and to hide islands in the Inspector's Wall / run list. It is not `isWallMounted`, because the 3D builder skips wall-mounted items and the shelf would disappear. `computeSocketIssues` now treats a shelf over a socket as **SOCKET HIDDEN**. Tests in `lib/shelves.test.ts`. | Fixed |
 
 ## Known issues
 
@@ -41,9 +45,9 @@ Found by driving the app in a browser: adding every element type, dragging, the 
 
 | # | Issue | Priority | Status | Notes |
 |---|---|---|---|---|
-| 13 | Adding an element when there's no free slot drops it at X 0, on top of whatever is there, with no message | High | Open | Seen with cabinets added to a full wall, and with a window added over wall cabinets. It contradicts the palette hint "new elements go into the first free slot". `findFreeX` falls back to 0. |
-| 14 | Shrinking the room squeezes cabinets on top of each other without warning | High | Open | Room width 400 → 100: two 60 cm cabinets were clamped into 100 cm and overlap by 20 cm. The island is left outside the room. |
-| 15 | A filler added by a fix next to a fridge or tall cabinet is base-height (87 cm), and gets its own countertop sliver | High | Open | R2 fix on Wall B: a 10 cm filler between the wall and a 185 cm fridge, with a "COUNTERTOP 10" slab on it. The filler should match the height of the unit it serves, and a filler with no base unit beside it shouldn't carry a countertop. |
+| 13 | Adding an element when there's no free slot drops it at X 0, on top of whatever is there, with no message | High | In review | Seen with cabinets added to a full wall, and with a window added over wall cabinets. It contradicts the palette hint "new elements go into the first free slot". `findFreeX` falls back to 0. |
+| 14 | Shrinking the room squeezes cabinets on top of each other without warning | High | In review | Room width 400 → 100: two 60 cm cabinets were clamped into 100 cm and overlap by 20 cm. The island is left outside the room. Found during the fix: the room fields applied values while typing, so typing 1000 passed through 100 and squeezed everything permanently. |
+| 15 | A filler added by a fix next to a fridge or tall cabinet is base-height (87 cm), and gets its own countertop sliver | High | In review | R2 fix on Wall B: a 10 cm filler between the wall and a 185 cm fridge, with a "COUNTERTOP 10" slab on it. The filler should match the height of the unit it serves, and a filler with no base unit beside it shouldn't carry a countertop. |
 | 16 | The project-wide problems list is hard to find and mislabelled | Medium | Open | It shows only when nothing is selected, but every newly added element is auto-selected, so it's usually hidden. It sits under the heading "Wall A · Schedule" although it covers the whole project. The red and amber counts have no labels. |
 | 17 | R14 "wall to wall" fires, with a fix button, on a run whose cabinets overlap | Medium | Open | After a room shrink, overlapping cabinets counted as "wall to wall". The scribe fix would narrow a cabinet in an already broken run. |
 | 18 | Load dialog: clicking a project's name does nothing; only the small "Open" button loads it | Medium | Open | The whole row highlights on hover, so it looks clickable. |
@@ -53,6 +57,42 @@ Found by driving the app in a browser: adding every element type, dragging, the 
 | 22 | Applying one fix gives no feedback | Low | Open | The problem disappears from the list, but nothing is selected or highlighted, so it's unclear what changed. "Add all" shows a message; a single fix doesn't. |
 | 23 | The 3D view's side panel only offers doors/drawers | Low | Open | No Inspector and no problems list in 3D. Clicking a fridge or tall unit does nothing. |
 | 24 | "Save to DB" is developer wording | Low | Open | "Save" or "Save project" is clearer for designers and clients. |
+
+#### Handoff: `fix/13-15-placement` (2026-11-06)
+
+**#13 Placement when nothing fits:**
+- `findFreeX` (`lib/geometry.ts`) returns `null` instead of 0 when there's no free slot.
+- The app then places the element at the widest free gap (`widestGapX`), so it overlaps as little as possible. It selects the element and shows a message, for example "No free 60 cm space on Wall A for Base Cabinet: it was placed over other elements at X 340. Move or narrow it, or make room."
+- The same applies to Duplicate.
+
+**#14 Room resize:**
+- The room Width, Depth and Ceiling fields apply on Enter or when leaving the field (new `commitOnBlur` option on `NumField`), not on every keystroke.
+- When a wall gets shorter, `syncRoom` (`lib/plan.ts`) moves units back in order from the far end, only as far as needed. A sink or cooktop moves with its cabinet. Units overlap only when a layer truly doesn't fit.
+- Islands that still fit are moved back inside the room.
+- If the new size would cause overlaps, or push an island out, a confirmation lists what happens (`roomChangeWarnings`). Cancel keeps the old size, and Undo reverts an accepted change.
+
+**#15 Fillers next to tall units:**
+- A filler added by the R1 or R2 fix takes the height, depth and plinth of the unit it serves, so it's 185 × 65 cm next to a fridge.
+- A filler only carries the countertop when it touches a base unit that has one and isn't taller than that unit. A filler alone, or between a wall and a fridge, gets no countertop.
+
+**How to check in the app:**
+- **#13:** add 7 base cabinets to a 400 cm wall. The 7th shows the message and lands at X 340.
+- **#14:** type 1000 into the room width; nothing moves until Enter. Then enter 200: a confirmation names Wall A. Cancel keeps 1000.
+- **#15:** on an empty wall, add a fridge, then two base cabinets, and click "Add 10 cm filler". The filler is 10 × 185, and the countertop covers only the base cabinets.
+
+**Checked:**
+- All checks pass: 119 frontend tests (10 new in `lib/placement.test.ts`, 4 in `lib/shelves.test.ts`), typecheck, lint (0 errors), format, pytest, Ruff and build.
+- The 300-case filler sweep still passes with the taller fillers.
+- All three fixes were checked **in the running app** (Playwright with Chrome, against an isolated copy with an empty database). There were no console errors.
+
+**Also on this branch:**
+- **Review findings R1–R4 for #7 (shelves):** all fixed; see the responses in Review findings.
+- **Lint:** fixed 5 existing ESLint errors in `design.test.ts` / `fixes.test.ts` (comma-expression loops and a meaningless `&&`). They were already on `main`; lint now has 0 errors (the 7 warnings are known issue #9).
+
+**Known limits:**
+- When the room gets *bigger*, units keep their positions. They don't spread out.
+- The confirmation is the browser's own dialog, like the existing "remove wall" confirmation.
+- #17 (R14 firing on overlapping runs) still applies when you accept a shrink that leaves overlaps.
 
 Checked and working: dragging (with live red overlap feedback), Inspector width/position edits, Delete, undo/redo, the R2 one-click filler (adds the filler, shifts the fridge, clears the problem), save and load, removing and restoring a wall, adding an island, PNG export (elevation or plan, matching the view), Print/PDF and JSON export. No console errors in any session.
 
@@ -65,3 +105,6 @@ Checked and working: dragging (with live red overlap feedback), Inspector width/
 - 2026-10-27: #6 Done: existing code reformatted with Prettier and Ruff; all tests, typecheck, lint and build pass.
 - 2026-10-27: UI review in a real browser (Playwright with the local Chrome, against an isolated copy of the app with an empty SQLite DB). Added #13–#24.
 - 2026-11-06: Split into Open questions (developer asks, reviewer records the owner's decision), Review findings (reviewer → developer) and Known issues. Roles defined in `CLAUDE.md` / `GEMINI.md`; spec moved to `PROJECT.md`.
+- 2026-11-06: Logged trial review findings R1–R4 for #7 Shelves (`82a9ec9`).
+- 2026-11-06: #13, #14 and #15 fixed on `fix/13-15-placement` and set to `In review` (handoff below the UI review table). Added the `In review` status for known issues.
+- 2026-11-06: Answered review findings R1–R4 (#7 shelves): all fixed on `fix/13-15-placement`. Also fixed 5 existing ESLint errors in test files.
