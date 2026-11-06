@@ -1,6 +1,8 @@
 # Planned Features
 
-Features to build before the deployment work in `ISSUES.md`. Status values: `Planned` · `In progress` · `Done` · `Dropped`.
+Every feature, past and future. Status values: `Planned` · `In progress` · `In review` · `Done` · `Dropped`.
+
+**How it's kept:** the developer (Claude) adds every new feature request as the next row before building it, with a section under Details (What, Done when, Decided) and a dated change-log line. When the work is ready, the status moves to `In review` with a handoff note (branch, what changed, how to check it). The reviewer (Gemini) then reviews it and logs findings in `ISSUES.md`. The feature becomes `Done` once the findings are resolved and the owner accepts it. Open design questions go to `ISSUES.md` → Open questions, not here.
 
 Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 goes first; corner rules use a run-end helper that #6 later extends to any room outline. The filler element (#4) doesn't depend on #6 and was built early; only its corner-aware part waits for #6.
 
@@ -51,7 +53,7 @@ Each type gets its own drawing in the elevation and 3D views. The plan view show
 
 **What:** More detailed, recognisable drawings of the water bar and the built-in coffee machine, in the elevation, plan and 3D views.
 
-**Decided:** Keep the schematic style from `CLAUDE.md` and add real-world detail in line work: proportions, a lever tap, a drip tray, a display, a bean hopper.
+**Decided:** Keep the schematic style from `PROJECT.md` and add real-world detail in line work: proportions, a lever tap, a drip tray, a display, a bean hopper.
 
 ### 4. Corner fillers
 
@@ -197,3 +199,4 @@ Notes and limits:
 - 2026-10-27: Fillers failed on full walls (120 of 196 test cases in a sweep). Fixed by narrowing the nearest regular cabinet by the exact shortfall (decided: narrow exactly). A regression test now runs every fix in every corner, on empty and full walls (over 300 cases): all apply, clear their problem and add no new red problems.
 - 2026-11-04: #7 shelves implemented (open wall shelf, internal shelves, open cabinets); checked by rendering the elevation. #8 (Hebrew/English) and #9 (island) added; scope to agree.
 - 2026-11-04: Decisions for #8: translate everything, toggle remembered per browser, Claude drafts and the owner reviews the Hebrew terms, RTL interface without mirrored drawings. #9 scope: two-sided island, seating overhang (R13), front marker.
+- 2026-11-06: Added the `In review` status and the intake/handoff process (developer Claude, reviewer Gemini).

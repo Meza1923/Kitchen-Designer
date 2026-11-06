@@ -1,6 +1,6 @@
 # Kitchen Designer
 
-Schematic kitchen planner with a top-down plan view, per-wall elevations and an orbit 3D view (spec: `CLAUDE.md`).
+Schematic kitchen planner with a top-down plan view, per-wall elevations and an orbit 3D view (spec: `PROJECT.md`).
 
 ## Quick start (Windows, macOS, Linux)
 

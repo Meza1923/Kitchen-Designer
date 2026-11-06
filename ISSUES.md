@@ -1,6 +1,24 @@
-# Known Issues
+# Issues and Questions
 
-Findings from the repository scan on 2026-10-27. Status values: `Open` · `In progress` · `Done` · `Deferred`.
+Three sections, each with its own owner:
+
+- **Open questions:** the developer (Claude) asks, the reviewer (Gemini) adds a second opinion, the product owner decides, and the reviewer writes down the decision. Status: `Awaiting owner` → `Decided` → `Applied` (applied by the developer).
+- **Review findings:** the reviewer logs them, and the developer fixes or answers them. Status: `Open` · `Fixed` · `Won't fix` (with a reason) · `Owner to decide`.
+- **Known issues:** bugs and tech debt, logged by either agent. Status: `Open` · `In progress` · `Done` · `Deferred`.
+
+## Open questions
+
+| Q# | Question | Options | Developer recommends | Reviewer view | Owner decision (date) | Status |
+|---|---|---|---|---|---|---|
+
+## Review findings
+
+| R# | Feature / branch | Severity | File:line | Finding and failure scenario | Developer response | Status |
+|---|---|---|---|---|---|---|
+
+## Known issues
+
+Findings from the repository scan on 2026-10-27.
 
 | # | Issue | Priority | Status | Notes |
 |---|---|---|---|---|
@@ -17,7 +35,7 @@ Findings from the repository scan on 2026-10-27. Status values: `Open` · `In pr
 | 8 | Spec file named `.CLAUDE`, so Claude Code doesn't load it automatically | Low | Done | Renamed to `CLAUDE.md`, README updated (not committed yet) |
 | 9 | 7 ESLint `react-refresh` warnings: component files also export helpers, so editing them reloads the full page instead of hot-swapping | Low | Open | Dev experience only; move the helpers into `lib/` when touching those files |
 
-## UI review (2026-10-27)
+### UI review (2026-10-27)
 
 Found by driving the app in a browser: adding every element type, dragging, the Inspector, the problems list and filler fixes, undo/redo, all views, save/load, wall and island management, room resizing, and exports.
 
@@ -46,3 +64,4 @@ Checked and working: dragging (with live red overlap feedback), Inspector width/
 - 2026-10-27: Decision: build features first, then the deployment work (#2–5, #10–12).
 - 2026-10-27: #6 Done: existing code reformatted with Prettier and Ruff; all tests, typecheck, lint and build pass.
 - 2026-10-27: UI review in a real browser (Playwright with the local Chrome, against an isolated copy of the app with an empty SQLite DB). Added #13–#24.
+- 2026-11-06: Split into Open questions (developer asks, reviewer records the owner's decision), Review findings (reviewer → developer) and Known issues. Roles defined in `CLAUDE.md` / `GEMINI.md`; spec moved to `PROJECT.md`.
