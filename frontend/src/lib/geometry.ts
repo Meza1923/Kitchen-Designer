@@ -1,4 +1,4 @@
-import type { ElementCategory, KitchenItem, WallRun } from '../types';
+import type { ElementCategory, FridgeType, KitchenItem, WallRun } from '../types';
 import { DEFAULT_BASE_HEIGHT } from './defaults';
 
 export type Layer = 'floor' | 'upper' | 'counter' | 'electrical';
@@ -12,6 +12,7 @@ const FLOOR: ElementCategory[] = [
   'base_cabinet',
   'tall_cabinet',
   'corner_blocker',
+  'filler',
   'fridge',
   'washing_machine',
   'under_counter_oven',
@@ -20,12 +21,12 @@ const FLOOR: ElementCategory[] = [
  * Upper layer: wall cabinets and wall openings. A door is an opening from the floor up, so through
  * the vertical-overlap rule it collides with base units, upper cabinets and windows in front of / above it.
  */
-const UPPER: ElementCategory[] = ['upper_cabinet', 'window', 'door'];
+const UPPER: ElementCategory[] = ['upper_cabinet', 'shelf', 'window', 'door'];
 /** Wall sockets: their own layer, so they never collide with cabinets (a socket behind a base unit is fine). */
 const ELECTRICAL: ElementCategory[] = ['socket', 'power_socket'];
 
 /** Floor items that carry a countertop slab. */
-export const COUNTER_BEARING: ElementCategory[] = ['base_cabinet', 'under_counter_oven', 'corner_blocker'];
+export const COUNTER_BEARING: ElementCategory[] = ['base_cabinet', 'under_counter_oven', 'corner_blocker', 'filler'];
 
 export const layerOf = (c: ElementCategory): Layer =>
   FLOOR.includes(c) ? 'floor' : UPPER.includes(c) ? 'upper' : ELECTRICAL.includes(c) ? 'electrical' : 'counter';
@@ -37,7 +38,7 @@ export const isCounterBearing = (c: ElementCategory) => COUNTER_BEARING.includes
 export const carriesCountertop = (i: KitchenItem) => isCounterBearing(i.category) && !i.noCountertop;
 export const hasCabinetFronts = (c: ElementCategory) => c === 'base_cabinet' || c === 'upper_cabinet';
 export const hasToeKickOption = (c: ElementCategory) =>
-  ['base_cabinet', 'tall_cabinet', 'corner_blocker', 'under_counter_oven', 'upper_cabinet'].includes(c);
+  ['base_cabinet', 'tall_cabinet', 'corner_blocker', 'filler', 'under_counter_oven', 'upper_cabinet'].includes(c);
 export const canMoveVertically = (c: ElementCategory) => (layerOf(c) === 'upper' && c !== 'door') || isElectrical(c);
 /** Openings live in the wall itself (no depth into the room); only walls can hold them. */
 export const isOpening = (c: ElementCategory) => c === 'window' || c === 'door';
@@ -323,7 +324,7 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number {
   if (layer === 'counter') {
     const occupied = itemsInLayer(wall, 'counter');
     const host = wall.items
-      .filter((i) => carriesCountertop(i) && i.category !== 'corner_blocker')
+      .filter((i) => carriesCountertop(i) && i.category !== 'corner_blocker' && i.category !== 'filler')
       .sort((a, b) => a.x - b.x)
       .find((b) => !occupied.some((c) => overlaps1d(c.x, right(c), b.x, right(b))));
     if (host) return clampX(wall, item, host.x + (host.width - item.width) / 2);
@@ -347,6 +348,36 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number {
     cursor = Math.max(cursor, right(b));
   }
   return wall.widthCm - cursor >= item.width ? cursor : 0;
+}
+
+/** One fridge door, as fractions of the fridge front (x from its left edge, y up from its bottom). */
+export interface FridgeDoor {
+  fx0: number;
+  fx1: number;
+  fy0: number;
+  fy1: number;
+  hinge: 'left' | 'right';
+  /** Where along the door's opening edge the handle sits. */
+  handle: 'top' | 'bottom' | 'middle';
+}
+
+/** Door layout per fridge type; the elevation and the 3D view both draw from this. */
+export function fridgeDoors(type: FridgeType = 'side_by_side'): FridgeDoor[] {
+  const pair = (fy0: number, fy1: number, handle: FridgeDoor['handle']): FridgeDoor[] => [
+    { fx0: 0, fx1: 0.5, fy0, fy1, hinge: 'left', handle },
+    { fx0: 0.5, fx1: 1, fy0, fy1, hinge: 'right', handle },
+  ];
+  switch (type) {
+    case 'side_by_side':
+      return pair(0, 1, 'middle');
+    case 'french_door':
+      return [...pair(0, 0.4, 'top'), ...pair(0.4, 1, 'bottom')];
+    case 'top_bottom':
+      return [
+        { fx0: 0, fx1: 1, fy0: 0, fy1: 0.35, hinge: 'left', handle: 'top' },
+        { fx0: 0, fx1: 1, fy0: 0.35, fy1: 1, hinge: 'left', handle: 'bottom' },
+      ];
+  }
 }
 
 /** Usable front height of a cabinet box (excluding the plinth). */

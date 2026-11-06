@@ -1,5 +1,6 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
+import type { Violation } from '../lib/rules';
 import { snapX } from '../lib/geometry';
 import { planPointToWallX, snapTo, wallFrame } from '../lib/plan';
 import { planOrigin, PlanDrawing, planSize } from './PlanDrawing';
@@ -25,10 +26,11 @@ interface Props {
   onActivate: (runId: string) => void;
   onMoveItem: (itemId: string, pos: { x: number }) => void;
   onMoveIsland: (runId: string, pos: { planX: number; planY: number }) => void;
+  violations: Violation[];
 }
 
 /** Interactive top-down floor plan. Items slide along their wall; islands move freely. */
-export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem, onMoveIsland }: Props) {
+export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem, onMoveIsland, violations }: Props) {
   const vp = useViewport(planSize(data, PLAN_SCALE), `${data.room.widthCm}:${data.room.depthCm}`);
   const shiftHeld = useShiftHeld();
   const drag = useRef<Drag | null>(null);
@@ -132,6 +134,7 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
           interactive
           onItemPointerDown={onItemPointerDown}
           onRunPointerDown={onRunPointerDown}
+          violations={violations}
         />
       </svg>
       <ZoomControls zoom={vp.zoom} onZoom={(f) => vp.zoomAt(f)} onFit={vp.fit} />

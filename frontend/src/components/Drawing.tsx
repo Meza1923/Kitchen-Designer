@@ -1,20 +1,12 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { KitchenItem, WallRun } from '../types';
-import {
-  computeCountertops,
-  computeGaps,
-  computeOverlaps,
-  computeSocketIssues,
-  computeUnsupported,
-  fmt,
-  itemsInLayer,
-  layerOf,
-  type Gap,
-} from '../lib/geometry';
+import { computeCountertops, computeGaps, fmt, itemsInLayer, layerOf, type Gap } from '../lib/geometry';
+import { severityByItem, type Violation } from '../lib/rules';
 import { FONT, INK, ItemShape, itemBounds, THIN, type ShapeContext } from './ItemShape';
 
 export const PAD = { left: 80, right: 80, top: 90, bottom: 120 };
 export const WARN = '#dc2626';
+export const AMBER = '#d97706';
 export const SELECT = '#2563eb';
 const MUTED = '#64748b';
 
@@ -145,9 +137,9 @@ function GapWarning({ gap, H, S }: { gap: Gap; H: number; S: number }) {
   const h = (gap.y1 - gap.y0) * S;
   return (
     <g>
-      <rect x={x} y={yTop} width={w} height={h} fill="url(#warnHatch)" stroke={WARN} strokeWidth={1.25} />
-      <line x1={x + w / 2} y1={yTop} x2={x + w / 2} y2={yTop - 14} stroke={WARN} strokeWidth={1} />
-      <Badge x={x + w / 2} y={yTop - 22} text={`! GAP: ${gap.width.toFixed(1)} cm (<10cm)`} />
+      <rect x={x} y={yTop} width={w} height={h} fill="url(#amberHatch)" stroke={AMBER} strokeWidth={1.25} />
+      <line x1={x + w / 2} y1={yTop} x2={x + w / 2} y2={yTop - 14} stroke={AMBER} strokeWidth={1} />
+      <Badge x={x + w / 2} y={yTop - 22} text={`! GAP: ${gap.width.toFixed(1)} cm (<10cm)`} color={AMBER} />
     </g>
   );
 }
@@ -158,10 +150,12 @@ export interface DrawingProps {
   selectedId?: string | null;
   interactive?: boolean;
   onItemPointerDown?: (e: ReactPointerEvent, item: KitchenItem) => void;
+  /** Rule violations for the project (see lib/rules.ts); only those touching this run are drawn. */
+  violations: Violation[];
 }
 
 /** The full schematic elevation of one wall, in px, with its origin at the top-left of the padded sheet. */
-export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointerDown }: DrawingProps) {
+export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointerDown, violations }: DrawingProps) {
   const H = wall.heightCm;
   const W = wall.widthCm * S;
   const Hpx = H * S;
@@ -169,14 +163,14 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
 
   const floorGaps = computeGaps(wall, 'floor');
   const upperGaps = computeGaps(wall, 'upper');
-  const overlaps = computeOverlaps(wall);
-  const unsupported = computeUnsupported(wall);
-  const socketIssues = computeSocketIssues(wall);
-  const overlapIds = new Set([
-    ...overlaps.flatMap((o) => [o.a, o.b]),
-    ...unsupported.map((i) => i.id),
-    ...socketIssues.map((s) => s.item.id),
-  ]);
+  // Gap warnings keep their own dimension-style marker; every other violation is framed / hatched generically.
+  const shown = violations.filter(
+    (v) =>
+      v.severity !== 'info' &&
+      v.rule !== 'narrow_gap' &&
+      (v.wallArea?.runId === wall.id || v.items.some((i) => i.runId === wall.id)),
+  );
+  const flagged = severityByItem(shown);
   const countertops = computeCountertops(wall);
   const floor = itemsInLayer(wall, 'floor').sort((a, b) => a.x - b.x);
   const upper = itemsInLayer(wall, 'upper').sort((a, b) => a.x - b.x);
@@ -224,6 +218,10 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
           <rect width="6" height="6" fill="#fee2e2" />
           <line x1="0" y1="0" x2="0" y2="6" stroke={WARN} strokeWidth="2" />
         </pattern>
+        <pattern id="amberHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" fill="#fee2e2" />
+          <line x1="0" y1="0" x2="0" y2="6" stroke={AMBER} strokeWidth="2" />
+        </pattern>
         <pattern id="ground" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="8" stroke="#94a3b8" strokeWidth="1" />
         </pattern>
@@ -266,7 +264,7 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             <GapWarning key={i} gap={g} H={H} S={S} />
           ))}
         {wall.items
-          .filter((i) => overlapIds.has(i.id))
+          .filter((i) => flagged.has(i.id))
           .map((i) => {
             const b = itemBounds(i, ctx);
             return (
@@ -277,31 +275,43 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
                 width={b.w + 4}
                 height={b.h + 4}
                 fill="none"
-                stroke={WARN}
+                stroke={flagged.get(i.id) === 'error' ? WARN : AMBER}
                 strokeWidth={2}
                 strokeDasharray="6 3"
                 style={{ pointerEvents: 'none' }}
               />
             );
           })}
-        {overlaps.map((o, i) => (
-          <Badge key={i} x={((o.x0 + o.x1) / 2) * S} y={(H - (o.y0 + o.y1) / 2) * S} text="OVERLAP" />
-        ))}
-        {socketIssues.map(({ item: i, reason }) => {
-          const b = itemBounds(i, ctx);
-          return (
-            <Badge
-              key={`sock-${i.id}`}
-              x={b.x + b.w / 2}
-              y={b.y - 16}
-              text={reason === 'opening' ? 'SOCKET IN OPENING' : 'SOCKET HIDDEN'}
-            />
-          );
-        })}
-        {unsupported.map((i) => {
-          const b = itemBounds(i, ctx);
-          return <Badge key={i.id} x={b.x + b.w / 2} y={b.y - 12} text="NO COUNTERTOP" />;
-        })}
+        {(() => {
+          // Several problems on one element: stack their badges upwards.
+          const stacked = new Map<string, number>();
+          return shown.map((v, k) => {
+            const color = v.severity === 'error' ? WARN : AMBER;
+            if (v.wallArea?.runId === wall.id) {
+              const a = v.wallArea;
+              return (
+                <g key={k} style={{ pointerEvents: 'none' }}>
+                  <rect
+                    x={a.x0 * S}
+                    y={(H - a.y1) * S}
+                    width={Math.max((a.x1 - a.x0) * S, 2)}
+                    height={(a.y1 - a.y0) * S}
+                    fill={`url(#${v.severity === 'error' ? 'warnHatch' : 'amberHatch'})`}
+                    fillOpacity={0.7}
+                  />
+                  <Badge x={((a.x0 + a.x1) / 2) * S} y={(H - (a.y0 + a.y1) / 2) * S} text={v.badge} color={color} />
+                </g>
+              );
+            }
+            // Plan-only problems (corner clashes, door swings) get their badge in the plan; here the frame is enough.
+            const first = wall.items.find((i) => v.items.some((r) => r.runId === wall.id && r.itemId === i.id));
+            if (!first || v.planArea) return null;
+            const b = itemBounds(first, ctx);
+            const n = stacked.get(first.id) ?? 0;
+            stacked.set(first.id, n + 1);
+            return <Badge key={k} x={b.x + b.w / 2} y={b.y - 12 - n * 18} text={v.badge} color={color} />;
+          });
+        })()}
 
         {/* Upper chain (above the wall) */}
         {upper.map((i) => (
@@ -323,7 +333,7 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             x1={g.x1 * S}
             y={rowUpperChain}
             label={fmt(g.width)}
-            color={g.warning ? WARN : '#94a3b8'}
+            color={g.warning ? AMBER : '#94a3b8'}
           />
         ))}
         <DimH x0={0} x1={W} y={rowTotal} label={`WALL ${fmt(wall.widthCm)} cm`} color={INK} extFrom={-4} />
@@ -355,7 +365,7 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             x1={g.x1 * S}
             y={rowFloorChain}
             label={fmt(g.width)}
-            color={g.warning ? WARN : '#94a3b8'}
+            color={g.warning ? AMBER : '#94a3b8'}
           />
         ))}
         {countertops.map((c, i) => (

@@ -1,18 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
-import { CATEGORY_LABELS, socketName, TALL_ZONE_LABELS } from './defaults';
-import {
-  computeCountertops,
-  computeGaps,
-  computeOverlaps,
-  computeSocketIssues,
-  computeUnsupported,
-  fmt,
-  isElectrical,
-} from './geometry';
+import { CATEGORY_LABELS, FRIDGE_TYPE_LABELS, socketName, TALL_ZONE_LABELS } from './defaults';
+import { computeCountertops, computeSocketIssues, fmt, isElectrical } from './geometry';
 import { Drawing, drawingSize } from '../components/Drawing';
 import { PlanDrawing, planSize } from '../components/PlanDrawing';
-import { computePlanConflicts } from './plan';
+import { checkProject, runViolations, type Violation } from './rules';
 
 const EXPORT_SCALE = 2;
 
@@ -52,10 +44,13 @@ export async function importJson(file: File): Promise<{ name: string; data: Proj
 export function describeItem(item: KitchenItem): string {
   const parts: string[] = [];
   if (item.category === 'base_cabinet' || item.category === 'upper_cabinet') {
+    const shelves = item.shelfCount ? `${item.shelfCount} shel${item.shelfCount > 1 ? 'ves' : 'f'}` : '';
     parts.push(
-      item.frontType === 'doors'
-        ? `${item.doorCount} door${item.doorCount > 1 ? 's' : ''}`
-        : `${item.drawerCount} drawers (${item.drawerSplitPcts.map(fmt).join('/')}%)`,
+      item.frontType === 'drawers'
+        ? `${item.drawerCount} drawers (${item.drawerSplitPcts.map(fmt).join('/')}%)`
+        : item.frontType === 'open'
+          ? ['open', shelves].filter(Boolean).join(', ')
+          : [`${item.doorCount} door${item.doorCount > 1 ? 's' : ''}`, shelves].filter(Boolean).join(', '),
     );
   }
   if (item.category === 'tall_cabinet' && item.tallZones) {
@@ -72,10 +67,12 @@ export function describeItem(item: KitchenItem): string {
   if (item.category === 'sink')
     parts.push(`${item.sinkBowls ?? 1} bowl${(item.sinkBowls ?? 1) > 1 ? 's' : ''}${item.hasFaucet ? ', faucet' : ''}`);
   if (item.category === 'stove') parts.push(`${item.burnerCount ?? 4} burners`);
+  if (item.category === 'fridge') parts.push(FRIDGE_TYPE_LABELS[item.fridgeType ?? 'side_by_side']);
   if (isElectrical(item.category)) parts.push(`${socketName(item)}, centre ${fmt(item.y + item.height / 2)} cm`);
   if (item.category === 'door')
     parts.push(`hinge ${item.doorHinge ?? 'left'}, opens ${item.doorSwing === 'out' ? 'out' : 'in'}`);
   if (item.hasToeKick) parts.push(`plinth ${fmt(item.toeKickHeight)}`);
+  if (item.noCountertop) parts.push('no countertop');
   return parts.join(' · ');
 }
 
@@ -103,36 +100,23 @@ export function scheduleRows(wall: WallRun): ScheduleRow[] {
     }));
 }
 
-export function wallWarnings(wall: WallRun): string[] {
-  const gaps = [...computeGaps(wall, 'floor'), ...computeGaps(wall, 'upper')].filter((g) => g.warning);
-  return [
-    ...gaps.map((g) => `Gap of ${g.width.toFixed(1)} cm at X ${fmt(g.x0)}–${fmt(g.x1)} (${g.layer} layer)`),
-    ...computeOverlaps(wall).map((o) => `Overlap at X ${fmt(o.x0)}–${fmt(o.x1)}`),
-    ...computeSocketIssues(wall).map(
-      ({ item, reason }) =>
-        `${socketName(item)} at X ${fmt(item.x)} is ${reason === 'opening' ? 'inside a window/door opening' : 'hidden behind a cabinet'}`,
-    ),
-    ...computeUnsupported(wall).map((i) => `${CATEGORY_LABELS[i.category]} at X ${fmt(i.x)} is not on a countertop`),
-  ];
-}
-
-function wallSvg(wall: WallRun): { markup: string; width: number; height: number } {
+function wallSvg(wall: WallRun, violations: Violation[]): { markup: string; width: number; height: number } {
   const { width, height } = drawingSize(wall, EXPORT_SCALE);
   const markup = renderToStaticMarkup(
     <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <rect width={width} height={height} fill="#ffffff" />
-      <Drawing wall={wall} scale={EXPORT_SCALE} />
+      <Drawing wall={wall} scale={EXPORT_SCALE} violations={violations} />
     </svg>,
   );
   return { markup, width, height };
 }
 
-function planSvg(data: ProjectData): { markup: string; width: number; height: number } {
+function planSvg(data: ProjectData, violations: Violation[]): { markup: string; width: number; height: number } {
   const { width, height } = planSize(data, EXPORT_SCALE);
   const markup = renderToStaticMarkup(
     <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
       <rect width={width} height={height} fill="#ffffff" />
-      <PlanDrawing data={data} scale={EXPORT_SCALE} />
+      <PlanDrawing data={data} scale={EXPORT_SCALE} violations={violations} />
     </svg>,
   );
   return { markup, width, height };
@@ -207,7 +191,8 @@ function electricalSection(data: ProjectData): string {
 
 /** PNG of the active elevation (with its schedule) or, when `wall` is null, of the floor plan. */
 export async function exportPng(projectName: string, data: ProjectData, wall: WallRun | null) {
-  const { markup, width, height } = wall ? wallSvg(wall) : planSvg(data);
+  const violations = checkProject(data);
+  const { markup, width, height } = wall ? wallSvg(wall, violations) : planSvg(data, violations);
   const img = new Image();
   const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml' }));
   await new Promise<void>((resolve, reject) => {
@@ -292,8 +277,13 @@ const esc = (s: string) =>
 export function printPdf(projectName: string, data: ProjectData) {
   const win = window.open('', '_blank');
   if (!win) throw new Error('Pop-up blocked: allow pop-ups to print.');
-  const plan = planSvg(data);
-  const planConflicts = computePlanConflicts(data);
+  const violations = checkProject(data);
+  const plan = planSvg(data, violations);
+  const planProblems = violations.filter((v) => v.planArea);
+  const problemList = (vs: Violation[]) =>
+    vs.length
+      ? `<ul class="warn">${vs.map((v) => `<li>${v.severity === 'error' ? '⛔' : v.severity === 'warning' ? '⚠' : 'ℹ'} ${esc(v.message)}</li>`).join('')}</ul>`
+      : '';
   const planSection = `<section>
       <h1>${esc(projectName)} — Floor Plan</h1>
       <p class="meta">Room ${fmt(data.room.widthCm)} × ${fmt(data.room.depthCm)} cm · ceiling ${fmt(data.room.heightCm)} cm</p>
@@ -302,7 +292,7 @@ export function printPdf(projectName: string, data: ProjectData) {
       <tbody>${runSummaryRows(data)
         .map((r) => `<tr>${COLS.map((c) => `<td>${esc(r[c.key])}</td>`).join('')}</tr>`)
         .join('')}</tbody></table>
-      ${planConflicts.length ? `<ul class="warn">${planConflicts.map((c) => `<li>${{ clash: 'Cross-wall clash', outside: 'Island outside the room', swing: 'Door swing blocked' }[c.kind]} at plan X ${fmt(c.rect.x)}, Y ${fmt(c.rect.y)}</li>`).join('')}</ul>` : ''}
+      ${problemList(planProblems)}
     </section>`;
   const sections =
     planSection +
@@ -310,9 +300,8 @@ export function printPdf(projectName: string, data: ProjectData) {
     data.walls
       .filter((wall) => wall.items.length > 0)
       .map((wall) => {
-        const { markup } = wallSvg(wall);
+        const { markup } = wallSvg(wall, violations);
         const rows = scheduleRows(wall);
-        const warnings = wallWarnings(wall);
         const counters = computeCountertops(wall);
         return `<section>
         <h1>${esc(projectName)} — ${esc(wall.name)}</h1>
@@ -321,7 +310,7 @@ export function printPdf(projectName: string, data: ProjectData) {
         <table><thead><tr>${COLS.map((c) => `<th>${c.title}</th>`).join('')}</tr></thead>
         <tbody>${rows.map((r) => `<tr>${COLS.map((c) => `<td>${esc(r[c.key])}</td>`).join('')}</tr>`).join('') || '<tr><td colspan="7">No elements</td></tr>'}</tbody></table>
         ${counters.length ? `<p class="meta">Countertop runs: ${counters.map((ct) => `${fmt(ct.width)} cm @ X ${fmt(ct.x)}`).join(', ')}</p>` : ''}
-        ${warnings.length ? `<ul class="warn">${warnings.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}
+        ${problemList(runViolations(violations, wall.id).filter((v) => !v.planArea))}
       </section>`;
       })
       .join('');

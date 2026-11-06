@@ -95,7 +95,7 @@ export const countertopRects = (f: Frame, run: WallRun) =>
   computeCountertops(run).map((c) => localRect(f, c.x, c.x + c.width, 0, countertopDepth(run, c)));
 
 const EPS = 0.1;
-const rectsOverlap = (a: Rect, b: Rect) =>
+export const rectsOverlap = (a: Rect, b: Rect) =>
   a.x < b.x + b.w - EPS && b.x < a.x + a.w - EPS && a.y < b.y + b.h - EPS && b.y < a.y + a.h - EPS;
 
 export const rectIntersection = (a: Rect, b: Rect): Rect => {
@@ -171,3 +171,31 @@ export function syncRoom(data: ProjectData): ProjectData {
 }
 
 export const snapTo = (v: number, step: number) => round1(Math.round(v / step) * step);
+
+/**
+ * What is at one end of a run. Rules ask this instead of looking at walls directly, so they keep working when
+ * room shapes beyond the rectangle (FEATURES.md #6) change how runs meet.
+ */
+export type RunEnd =
+  | { kind: 'inside_corner'; runId: string; neighbourId: string; neighbourEnd: 'start' | 'end' }
+  | { kind: 'open'; runId: string };
+
+/**
+ * Both ends of a run (start = wall-local x 0, end = x = length). In the rectangular room each wall's end meets the
+ * next wall clockwise at its start (north → east → south → west); a removed neighbour leaves the end open.
+ * Islands are open at both ends.
+ */
+export function runEnds(data: ProjectData, run: WallRun): { start: RunEnd; end: RunEnd } {
+  const open = { kind: 'open', runId: run.id } as const;
+  if (run.kind !== 'wall' || run.removed || !run.side) return { start: open, end: open };
+  const order = ['north', 'east', 'south', 'west'] as const;
+  const i = order.indexOf(run.side);
+  const wallOn = (side: (typeof order)[number]) =>
+    data.walls.find((w) => w.kind === 'wall' && w.side === side && !w.removed);
+  const prev = wallOn(order[(i + 3) % 4]);
+  const next = wallOn(order[(i + 1) % 4]);
+  return {
+    start: prev ? { kind: 'inside_corner', runId: run.id, neighbourId: prev.id, neighbourEnd: 'end' } : open,
+    end: next ? { kind: 'inside_corner', runId: run.id, neighbourId: next.id, neighbourEnd: 'start' } : open,
+  };
+}

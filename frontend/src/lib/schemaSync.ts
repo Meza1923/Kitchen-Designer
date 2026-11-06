@@ -4,7 +4,16 @@
  * these checks make `tsc` fail instead. Regenerate the API types with `npm run gen:api`.
  */
 import type { components } from '../generated/api';
-import type { ElementCategory, KitchenItem, ProjectData, Room, TallZoneConfig, TallZoneType, WallRun } from '../types';
+import type {
+  ElementCategory,
+  FridgeType,
+  KitchenItem,
+  ProjectData,
+  Room,
+  TallZoneConfig,
+  TallZoneType,
+  WallRun,
+} from '../types';
 
 type S = components['schemas'];
 
@@ -21,6 +30,7 @@ export type SchemaSyncChecks = [
   // Same enum values on both sides.
   Expect<Equal<ElementCategory, S['KitchenItem']['category']>>,
   Expect<Equal<TallZoneType, S['TallZoneConfig']['type']>>,
+  Expect<Equal<FridgeType, NonNullable<S['KitchenItem']['fridgeType']>>>,
   // Everything the client saves passes server validation.
   Expect<ProjectData extends S['ProjectData-Input'] ? true : false>,
 ];

@@ -37,6 +37,8 @@
               "upper_cabinet",
               "tall_cabinet",
               "corner_blocker",
+              "filler",
+              "shelf",
               "fridge",
               "washing_machine",
               "under_counter_oven",
@@ -116,11 +118,28 @@
             "title": "Drawersplitpcts",
             "type": "array"
           },
+          "fridgeType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "side_by_side",
+                  "french_door",
+                  "top_bottom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fridgetype"
+          },
           "frontType": {
             "default": "doors",
             "enum": [
               "doors",
-              "drawers"
+              "drawers",
+              "open"
             ],
             "title": "Fronttype",
             "type": "string"
@@ -170,6 +189,19 @@
               }
             ],
             "title": "Nocountertop"
+          },
+          "shelfCount": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shelfcount"
           },
           "sinkBowls": {
             "anyOf": [

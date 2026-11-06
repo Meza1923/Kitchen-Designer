@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Maximize } from 'lucide-react';
 import type { ProjectData } from '../types';
 import { buildKitchen, disposeTree, type WallMeta } from '../lib/scene3d';
@@ -21,6 +22,7 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
     camera: THREE.PerspectiveCamera;
     controls: OrbitControls;
     model: THREE.Group | null;
+    envMap: THREE.Texture;
     resetView: () => void;
   } | null>(null);
   const onPickRef = useRef(onPick);
@@ -46,6 +48,13 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0005;
     scene.add(sun, sun.target);
+
+    // Soft studio reflections for metallic appliances (applied per material, so cabinets keep their look).
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    const envMap = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
 
     const camera = new THREE.PerspectiveCamera(45, 1, 5, 20000);
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -113,7 +122,7 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointerup', onUp);
 
-    ctx.current = { renderer, scene, camera, controls, model: null, resetView };
+    ctx.current = { renderer, scene, camera, controls, model: null, envMap, resetView };
     resetView();
 
     return () => {
@@ -123,6 +132,7 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
       renderer.domElement.removeEventListener('pointerup', onUp);
       controls.dispose();
       if (ctx.current?.model) disposeTree(ctx.current.model);
+      envMap.dispose();
       renderer.dispose();
       wrap.removeChild(renderer.domElement);
       ctx.current = null;
@@ -137,7 +147,7 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
       c.scene.remove(c.model);
       disposeTree(c.model);
     }
-    c.model = buildKitchen(data, selectedId);
+    c.model = buildKitchen(data, selectedId, c.envMap);
     c.scene.add(c.model);
   }, [data, selectedId]);
 

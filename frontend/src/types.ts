@@ -3,6 +3,8 @@ export type ElementCategory =
   | 'upper_cabinet'
   | 'tall_cabinet'
   | 'corner_blocker'
+  | 'filler'
+  | 'shelf'
   | 'fridge'
   | 'washing_machine'
   | 'under_counter_oven'
@@ -16,6 +18,9 @@ export type ElementCategory =
   | 'power_socket';
 
 export type TallZoneType = 'door' | 'drawers' | 'oven' | 'microwave' | 'coffee' | 'open';
+
+/** Side-by-side: 2 doors next to each other · French door: 2 on top, 2 below · Top/bottom: fridge above, freezer below. */
+export type FridgeType = 'side_by_side' | 'french_door' | 'top_bottom';
 
 export interface TallZoneConfig {
   id: string;
@@ -42,10 +47,11 @@ export interface KitchenItem {
   noCountertop?: boolean;
 
   // For 'base_cabinet' and 'upper_cabinet'
-  frontType: 'doors' | 'drawers';
+  frontType: 'doors' | 'drawers' | 'open'; // 'open' = no doors, shelves visible
   doorCount: 1 | 2;
   drawerCount: number; // 1 to 5
   drawerSplitPcts: number[]; // Array of percentages summing to 100, top to bottom
+  shelfCount?: number; // shelves inside the cabinet (0–5); missing means none
 
   // For 'tall_cabinet' (Tower / Built-in), stacked bottom to top
   tallZones?: TallZoneConfig[];
@@ -57,7 +63,11 @@ export interface KitchenItem {
   // For 'stove'
   burnerCount?: 4 | 5;
 
-  // For 'door': hinge side as seen from inside the room, and swing direction
+  // For 'fridge' (missing means side-by-side)
+  fridgeType?: FridgeType;
+
+  // For 'door': hinge side as seen from inside the room, and swing direction.
+  // doorHinge also sets the hinge of a tall cabinet's door zones.
   doorHinge?: 'left' | 'right';
   doorSwing?: 'in' | 'out';
 

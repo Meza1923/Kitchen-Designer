@@ -7,8 +7,10 @@ import {
   Droplets,
   Flame,
   GlassWater,
+  GripVertical,
   Microwave,
   PanelTop,
+  RectangleHorizontal,
   Plug,
   RectangleVertical,
   Refrigerator,
@@ -43,8 +45,10 @@ const GROUPS: { title: string; items: Entry[] }[] = [
     items: [
       { category: 'base_cabinet', icon: Square, dims: '60 × 87' },
       { category: 'upper_cabinet', icon: PanelTop, dims: '60 × 70 @ 145' },
+      { category: 'shelf', icon: RectangleHorizontal, dims: '80 × 4 @ 150 · open' },
       { category: 'tall_cabinet', icon: RectangleVertical, dims: '60 × 215' },
       { category: 'corner_blocker', icon: Slash, dims: '65 × 87' },
+      { category: 'filler', icon: GripVertical, dims: '5 × 87 · closes gaps' },
     ],
   },
   {

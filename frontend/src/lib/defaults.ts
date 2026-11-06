@@ -1,5 +1,6 @@
 import type {
   ElementCategory,
+  FridgeType,
   KitchenItem,
   ProjectData,
   Room,
@@ -19,6 +20,8 @@ export const CATEGORY_LABELS: Record<ElementCategory, string> = {
   upper_cabinet: 'Upper Wall Cabinet',
   tall_cabinet: 'Tall Tower Cabinet',
   corner_blocker: 'Corner Blocker',
+  filler: 'Filler',
+  shelf: 'Open Wall Shelf',
   fridge: 'Fridge',
   washing_machine: 'Washing Machine',
   under_counter_oven: 'Under-Counter Oven',
@@ -32,6 +35,15 @@ export const CATEGORY_LABELS: Record<ElementCategory, string> = {
   power_socket: 'Power Socket 16A',
 };
 
+export const FRIDGE_TYPE_LABELS: Record<FridgeType, string> = {
+  side_by_side: 'Side-by-side',
+  french_door: 'French door',
+  top_bottom: 'Top / bottom',
+};
+
+/** Default width per fridge type (cm). */
+export const FRIDGE_WIDTHS: Record<FridgeType, number> = { side_by_side: 90, french_door: 90, top_bottom: 60 };
+
 export const TALL_ZONE_LABELS: Record<TallZoneType, string> = {
   drawers: 'Drawers',
   oven: 'Built-in Oven',
@@ -42,6 +54,10 @@ export const TALL_ZONE_LABELS: Record<TallZoneType, string> = {
 };
 
 export const WIDTH_PRESETS = [30, 40, 45, 60, 80, 90, 100, 120];
+export const FILLER_WIDTH_PRESETS = [2, 3, 5, 7, 10];
+
+/** Shelves an open cabinet starts with when none are set. */
+export const defaultOpenShelves = (c: ElementCategory) => (c === 'upper_cabinet' ? 2 : 1);
 export const DEPTH_PRESETS = [35, 45, 60, 65];
 
 export const SIDE_LABELS: Record<WallSide, string> = { north: 'North', east: 'East', south: 'South', west: 'West' };
@@ -64,6 +80,9 @@ const SPECS: Record<ElementCategory, Spec> = {
   upper_cabinet: { width: 60, height: 70, depth: 35, y: 145, toeKick: 0 },
   tall_cabinet: { width: 60, height: 215, depth: 60, y: 0, toeKick: 10 },
   corner_blocker: { width: 65, height: 87, depth: 60, y: 0, toeKick: 10 },
+  filler: { width: 5, height: 87, depth: 60, y: 0, toeKick: 10 },
+  // Open wall shelf: height is the board thickness, y its underside.
+  shelf: { width: 80, height: 4, depth: 25, y: 150, toeKick: 0 },
   fridge: { width: 90, height: 185, depth: 65, y: 0, toeKick: 0 },
   washing_machine: { width: 60, height: 85, depth: 60, y: 0, toeKick: 0 },
   under_counter_oven: { width: 60, height: 87, depth: 60, y: 0, toeKick: 10 },
@@ -129,6 +148,7 @@ export function createItem(category: ElementCategory): KitchenItem {
     item.hasFaucet = true;
   }
   if (category === 'stove') item.burnerCount = 4;
+  if (category === 'fridge') item.fridgeType = 'side_by_side';
   if (category === 'socket') item.socketCount = 1;
   if (category === 'door') {
     item.doorHinge = 'left';

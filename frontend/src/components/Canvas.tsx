@@ -1,5 +1,6 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { KitchenItem, WallRun } from '../types';
+import type { Violation } from '../lib/rules';
 import { canMoveVertically, clampY, round1, snapX } from '../lib/geometry';
 import { Drawing, drawingSize, PAD } from './Drawing';
 import { GridBackground, useShiftHeld, useViewport, ZoomControls } from './viewport';
@@ -19,10 +20,11 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onMoveItem: (id: string, pos: { x: number; y: number }) => void;
+  violations: Violation[];
 }
 
 /** Interactive front elevation of one wall run. */
-export function Canvas({ wall, selectedId, onSelect, onMoveItem }: Props) {
+export function Canvas({ wall, selectedId, onSelect, onMoveItem, violations }: Props) {
   const vp = useViewport(drawingSize(wall, SCALE), `${wall.id}:${wall.widthCm}:${wall.heightCm}`);
   const shiftHeld = useShiftHeld();
   const drag = useRef<ItemDrag | null>(null);
@@ -72,7 +74,14 @@ export function Canvas({ wall, selectedId, onSelect, onMoveItem }: Props) {
         onPointerCancel={onPointerUp}
       >
         <GridBackground id="elevGrid" cell={10 * SCALE} originX={PAD.left} originY={PAD.top} />
-        <Drawing wall={wall} scale={SCALE} selectedId={selectedId} interactive onItemPointerDown={onItemPointerDown} />
+        <Drawing
+          wall={wall}
+          scale={SCALE}
+          selectedId={selectedId}
+          interactive
+          onItemPointerDown={onItemPointerDown}
+          violations={violations}
+        />
       </svg>
       <ZoomControls zoom={vp.zoom} onZoom={(f) => vp.zoomAt(f)} onFit={vp.fit} />
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">

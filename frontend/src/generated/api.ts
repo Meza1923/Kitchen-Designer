@@ -75,7 +75,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "base_cabinet" | "upper_cabinet" | "tall_cabinet" | "corner_blocker" | "fridge" | "washing_machine" | "under_counter_oven" | "sink" | "stove" | "water_bar" | "coffee_machine" | "window" | "door" | "socket" | "power_socket";
+            category: "base_cabinet" | "upper_cabinet" | "tall_cabinet" | "corner_blocker" | "filler" | "shelf" | "fridge" | "washing_machine" | "under_counter_oven" | "sink" | "stove" | "water_bar" | "coffee_machine" | "window" | "door" | "socket" | "power_socket";
             /** Depth */
             depth?: number | null;
             /**
@@ -95,12 +95,14 @@ export interface components {
             drawerCount: number;
             /** Drawersplitpcts */
             drawerSplitPcts?: number[];
+            /** Fridgetype */
+            fridgeType?: ("side_by_side" | "french_door" | "top_bottom") | null;
             /**
              * Fronttype
              * @default doors
              * @enum {string}
              */
-            frontType: "doors" | "drawers";
+            frontType: "doors" | "drawers" | "open";
             /** Hasfaucet */
             hasFaucet?: boolean | null;
             /**
@@ -116,6 +118,8 @@ export interface components {
             label?: string | null;
             /** Nocountertop */
             noCountertop?: boolean | null;
+            /** Shelfcount */
+            shelfCount?: number | null;
             /** Sinkbowls */
             sinkBowls?: (1 | 2) | null;
             /** Socketcount */

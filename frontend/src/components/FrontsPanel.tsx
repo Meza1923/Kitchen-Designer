@@ -1,6 +1,6 @@
 import { MousePointerClick } from 'lucide-react';
 import type { KitchenItem } from '../types';
-import { CATEGORY_LABELS, equalSplit } from '../lib/defaults';
+import { CATEGORY_LABELS, defaultOpenShelves, equalSplit } from '../lib/defaults';
 import { fmt } from '../lib/geometry';
 import { Chips } from './Inspector';
 
@@ -31,10 +31,16 @@ export function FrontsPanel({
       </div>
       <span className="label">Fronts</span>
       <Chips
-        options={['doors', 'drawers'] as ('doors' | 'drawers')[]}
+        options={['doors', 'drawers', 'open'] as KitchenItem['frontType'][]}
         value={item.frontType}
-        onChange={(frontType) => onChange({ frontType })}
-        render={(v) => (v === 'doors' ? 'Doors' : 'Drawers')}
+        onChange={(frontType) =>
+          onChange(
+            frontType === 'open' && item.shelfCount === undefined
+              ? { frontType, shelfCount: defaultOpenShelves(item.category) }
+              : { frontType },
+          )
+        }
+        render={(v) => ({ doors: 'Doors', drawers: 'Drawers', open: 'Open' })[v]}
       />
       {item.frontType === 'drawers' && (
         <div className="mt-3">

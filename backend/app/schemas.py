@@ -9,6 +9,8 @@ ElementCategory = Literal[
     "upper_cabinet",
     "tall_cabinet",
     "corner_blocker",
+    "filler",
+    "shelf",
     "fridge",
     "washing_machine",
     "under_counter_oven",
@@ -22,6 +24,7 @@ ElementCategory = Literal[
     "power_socket",
 ]
 TallZoneType = Literal["door", "drawers", "oven", "microwave", "coffee", "open"]
+FridgeType = Literal["side_by_side", "french_door", "top_bottom"]
 
 
 class TallZoneConfig(BaseModel):
@@ -43,14 +46,16 @@ class KitchenItem(BaseModel):
     hasToeKick: bool = False
     toeKickHeight: float = 10
     noCountertop: Optional[bool] = None  # counter-bearing units only: leave out the countertop slab
-    frontType: Literal["doors", "drawers"] = "doors"
+    frontType: Literal["doors", "drawers", "open"] = "doors"
     doorCount: Literal[1, 2] = 1
     drawerCount: int = Field(default=3, ge=1, le=5)
     drawerSplitPcts: list[float] = Field(default_factory=list)
+    shelfCount: Optional[int] = Field(default=None, ge=0, le=5)  # base / upper cabinets: internal shelves
     tallZones: Optional[list[TallZoneConfig]] = None
     sinkBowls: Optional[Literal[1, 2]] = None
     hasFaucet: Optional[bool] = None
     burnerCount: Optional[Literal[4, 5]] = None
+    fridgeType: Optional[FridgeType] = None  # missing means side-by-side
     doorHinge: Optional[Literal["left", "right"]] = None
     doorSwing: Optional[Literal["in", "out"]] = None
     socketCount: Optional[Literal[1, 2, 3, 4]] = None

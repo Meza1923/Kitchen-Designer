@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
-import { boxHeight, computeCountertops, isElectrical, isOpening, isWallMounted } from './geometry';
+import { boxHeight, computeCountertops, fridgeDoors, isElectrical, isOpening, isWallMounted } from './geometry';
 import {
   countertopRects,
   islandRect,
@@ -9,6 +10,7 @@ import {
   wallFrame,
   WALL_THICKNESS_CM,
   type Frame,
+  type Pt,
   type Rect,
 } from './plan';
 
@@ -46,12 +48,100 @@ export interface WallMeta {
   normal: THREE.Vector3;
 }
 
+/** Appliance finishes; the plain `mat` colours stay matte for cabinets, walls and counters. */
+const FINISHES = {
+  steel: { color: 0xd1d5db, metalness: 0.9, roughness: 0.38 },
+  chrome: { color: 0xe5e7eb, metalness: 0.9, roughness: 0.18 },
+  glossWhite: { color: 0xe5e9ee, roughness: 0.35 },
+  glossBlack: { color: 0x1f2937, roughness: 0.3 },
+  blackGlass: { color: 0x0b1120, roughness: 0.08 },
+  screen: { color: 0x0f172a, roughness: 0.1, emissive: 0x38bdf8, emissiveIntensity: 0.55 },
+  led: { color: 0xe0f2fe, emissive: 0x7dd3fc, emissiveIntensity: 1 },
+  ceramic: { color: 0xffffff, roughness: 0.45 },
+  waterGlass: { color: 0xbae6fd, roughness: 0.05, opacity: 0.45, depthWrite: false },
+} satisfies Record<string, THREE.MeshStandardMaterialParameters>;
+type Finish = keyof typeof FINISHES;
+
 class Builder {
   private mats = new Map<string, THREE.MeshStandardMaterial>();
   readonly edge = new THREE.LineBasicMaterial({ color: 0x334155 });
   readonly edgeSelected = new THREE.LineBasicMaterial({ color: 0x2563eb });
 
-  constructor(public selectedId: string | null) {}
+  private special = new Map<string, THREE.MeshStandardMaterial>();
+
+  constructor(
+    public selectedId: string | null,
+    /** Environment map for reflective appliance materials; without one they fall back to a duller look. */
+    private envMap: THREE.Texture | null = null,
+  ) {}
+
+  /** Appliance surface finish (see FINISHES), reflecting the environment map when there is one. */
+  finish(name: Finish) {
+    let m = this.special.get(name);
+    if (!m) {
+      const { metalness = 0, ...rest }: THREE.MeshStandardMaterialParameters = FINISHES[name];
+      // Without reflections, metal renders almost black; tone it down.
+      m = new THREE.MeshStandardMaterial({
+        ...rest,
+        metalness: this.envMap ? metalness : metalness * 0.3,
+        envMap: this.envMap,
+        transparent: rest.opacity !== undefined,
+      });
+      this.special.set(name, m);
+    }
+    return m;
+  }
+
+  /** Box over plan rect `r` between heights y0..y1 with rounded edges and no outline (appliance bodies, doors). */
+  roundedBox(
+    parent: THREE.Object3D,
+    r: Rect,
+    y0: number,
+    y1: number,
+    material: THREE.Material,
+    radius: number,
+    o: { item?: KitchenItem; run?: WallRun } = {},
+  ) {
+    const h = y1 - y0;
+    if (r.w <= 0.01 || r.h <= 0.01 || h <= 0.01) return;
+    const geom = new RoundedBoxGeometry(r.w, h, r.h, 4, Math.min(radius, r.w / 2, h / 2, r.h / 2));
+    const mesh = new THREE.Mesh(geom, material);
+    mesh.position.set(r.x + r.w / 2, y0 + h / 2, r.y + r.h / 2);
+    mesh.castShadow = mesh.receiveShadow = true;
+    if (o.item) mesh.userData = { itemId: o.item.id, runId: o.run?.id };
+    parent.add(mesh);
+  }
+
+  /** Cylinder centred at plan point `p`, height `y`; vertical, or pointing along `axis` (a plan direction). */
+  cylinder(
+    parent: THREE.Object3D,
+    p: Pt,
+    y: number,
+    radius: number,
+    length: number,
+    material: THREE.Material,
+    axis: Pt | null,
+    o: { item?: KitchenItem; run?: WallRun } = {},
+  ) {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 20), material);
+    mesh.position.set(p.x, y, p.y);
+    if (axis) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(axis.x, 0, axis.y));
+    mesh.castShadow = !material.transparent; // transparent shadows render as dithered noise
+    if (o.item) mesh.userData = { itemId: o.item.id, runId: o.run?.id };
+    parent.add(mesh);
+  }
+
+  /** Selection outline only (for items drawn without edges). */
+  outline(parent: THREE.Object3D, r: Rect, y0: number, y1: number) {
+    const h = y1 - y0;
+    const lines = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(r.w, h, r.h)),
+      this.edgeSelected,
+    );
+    lines.position.set(r.x + r.w / 2, y0 + h / 2, r.y + r.h / 2);
+    lines.raycast = () => {};
+    parent.add(lines);
+  }
 
   mat(color: number, opacity = 1) {
     const key = `${color}:${opacity}`;
@@ -129,13 +219,13 @@ interface Panel {
 /** Front panels (doors / drawers / zones) of a cabinet box spanning a0..a1 × y0..y1. */
 function frontPanels(item: KitchenItem, a0: number, a1: number, y0: number, y1: number): Panel[] {
   const g = GAP;
-  const doors = (count: number, handle: Panel['handle'], ya = y0, yb = y1): Panel[] =>
+  const doors = (count: number, handle: Panel['handle'], ya = y0, yb = y1, hinge: Panel['hinge'] = 'left'): Panel[] =>
     count === 2
       ? [
           { a0: a0 + g, a1: (a0 + a1) / 2 - g / 2, y0: ya + g, y1: yb - g, handle, hinge: 'left' },
           { a0: (a0 + a1) / 2 + g / 2, a1: a1 - g, y0: ya + g, y1: yb - g, handle, hinge: 'right' },
         ]
-      : [{ a0: a0 + g, a1: a1 - g, y0: ya + g, y1: yb - g, handle, hinge: 'left' }];
+      : [{ a0: a0 + g, a1: a1 - g, y0: ya + g, y1: yb - g, handle, hinge }];
   const drawers = (pcts: number[], ya = y0, yb = y1): Panel[] => {
     const total = pcts.reduce((s, p) => s + p, 0) || 1;
     let top = yb;
@@ -150,6 +240,7 @@ function frontPanels(item: KitchenItem, a0: number, a1: number, y0: number, y1: 
   switch (item.category) {
     case 'base_cabinet':
     case 'upper_cabinet':
+      if (item.frontType === 'open') return [];
       if (item.frontType === 'drawers') {
         const pcts =
           item.drawerSplitPcts.length === item.drawerCount ? item.drawerSplitPcts : Array(item.drawerCount).fill(1);
@@ -169,7 +260,7 @@ function frontPanels(item: KitchenItem, a0: number, a1: number, y0: number, y1: 
           case 'drawers':
             return drawers(Array(Math.max(1, z.drawerCount ?? 3)).fill(1), ya, yb);
           case 'door':
-            return doors(1, 'middle', ya, yb);
+            return doors(1, 'middle', ya, yb, item.doorHinge ?? 'left');
           case 'oven':
             return [
               {
@@ -290,33 +381,84 @@ function addItem(
     case 'under_counter_oven': {
       const tk = item.hasToeKick ? item.toeKickHeight : 0;
       if (tk > 0) b.box(group, localRect(f, a0 + 0.5, a1 - 0.5, 0, d - 6), y0, y0 + tk, C.plinth, o);
+      if (item.frontType === 'open' && (item.category === 'base_cabinet' || item.category === 'upper_cabinet')) {
+        // Open cabinet: built from boards so the inside and its shelves show.
+        const t = 1.8;
+        const [yb, yt] = [y0 + tk, y1];
+        b.box(group, localRect(f, a0, a1, 0, t), yb, yt, C.carcass, o); // back
+        b.box(group, localRect(f, a0, a0 + t, 0, d), yb, yt, C.front, o); // sides
+        b.box(group, localRect(f, a1 - t, a1, 0, d), yb, yt, C.front, o);
+        b.box(group, localRect(f, a0 + t, a1 - t, 0, d), yb, yb + t, C.front, o); // bottom, top
+        b.box(group, localRect(f, a0 + t, a1 - t, 0, d), yt - t, yt, C.front, o);
+        const n = item.shelfCount ?? 0;
+        for (let k = 1; k <= n; k++) {
+          const ys = yb + ((yt - yb) * k) / (n + 1);
+          b.box(group, localRect(f, a0 + t, a1 - t, t, d - 1), ys - t / 2, ys + t / 2, C.front, o);
+        }
+        return;
+      }
       const isCorner = item.category === 'corner_blocker';
       b.box(group, localRect(f, a0, a1, 0, isCorner ? d : d - FRONT), y0 + tk, y1, isCorner ? C.hatch : C.carcass, o);
       addPanels(b, group, f, d, item, run, frontPanels(item, a0, a1, y0 + tk, y0 + tk + boxHeight(item)));
       return;
     }
+    case 'shelf': {
+      // Open wall shelf: a board on two brackets.
+      b.box(group, localRect(f, a0, a1, 0, d), y0, y1, C.front, o);
+      for (const fx of [0.15, 0.85]) {
+        const bx = a0 + (a1 - a0) * fx;
+        b.box(group, localRect(f, bx - 0.6, bx + 0.6, 0, d * 0.7), y0 - Math.min(12, d * 0.5), y0, C.handle, {
+          ...o,
+          edges: false,
+        });
+      }
+      return;
+    }
+    case 'filler': {
+      // A plain panel flush with the cabinet fronts.
+      const tk = item.hasToeKick ? item.toeKickHeight : 0;
+      if (tk > 0) b.box(group, localRect(f, a0, a1, 0, d - 6), y0, y0 + tk, C.plinth, o);
+      b.box(group, localRect(f, a0, a1, 0, d), y0 + tk, y1, C.front, o);
+      return;
+    }
     case 'fridge': {
-      b.box(group, localRect(f, a0, a1, 0, d - FRONT), y0, y1, C.steel, o);
-      addPanels(b, group, f, d, item, run, [
-        {
-          a0: a0 + GAP,
-          a1: (a0 + a1) / 2 - GAP / 2,
-          y0: y0 + 2,
-          y1: y1 - GAP,
-          color: C.steel,
-          handle: 'middle',
-          hinge: 'left',
-        },
-        {
-          a0: (a0 + a1) / 2 + GAP / 2,
-          a1: a1 - GAP,
-          y0: y0 + 2,
-          y1: y1 - GAP,
-          color: C.steel,
-          handle: 'middle',
-          hinge: 'right',
-        },
-      ]);
+      // Appliance look: steel body and thick rounded doors (no CAD outlines), dark shadow lines between the doors,
+      // round bar handles on stand-offs and a dark kick grille.
+      const DOOR = Math.min(6, d * 0.1);
+      const SPLIT = 0.8;
+      const grille = 5;
+      const steel = b.finish('steel');
+      const chrome = b.finish('chrome');
+      b.roundedBox(group, localRect(f, a0, a1, 0, d - DOOR - 0.5), y0, y1, steel, 1.5, o);
+      b.box(group, localRect(f, a0 + 0.5, a1 - 0.5, d - DOOR - 0.5, d - DOOR), y0, y1 - 0.5, C.dark, {
+        ...o,
+        edges: false,
+      });
+      b.box(group, localRect(f, a0 + 2, a1 - 2, d - DOOR - 0.5, d - 3), y0, y0 + grille - 0.5, C.dark, {
+        ...o,
+        edges: false,
+      });
+      const [fa0, fa1, fy0, fy1] = [a0, a1, y0 + grille, y1];
+      const at = (from: number, to: number, frac: number) => from + (to - from) * frac;
+      for (const door of fridgeDoors(item.fridgeType)) {
+        const da0 = at(fa0, fa1, door.fx0) + (door.fx0 > 0 ? SPLIT / 2 : 0);
+        const da1 = at(fa0, fa1, door.fx1) - (door.fx1 < 1 ? SPLIT / 2 : 0);
+        const dy0 = at(fy0, fy1, door.fy0) + (door.fy0 > 0 ? SPLIT / 2 : 0);
+        const dy1 = at(fy0, fy1, door.fy1) - (door.fy1 < 1 ? SPLIT / 2 : 0);
+        b.roundedBox(group, localRect(f, da0, da1, d - DOOR, d), dy0, dy1, steel, 1.2, o);
+
+        const dh = dy1 - dy0;
+        const len = Math.min(dh * (door.handle === 'middle' ? 0.45 : 0.55), 75);
+        const end = Math.min(dh * 0.08, 8);
+        const hy0 =
+          door.handle === 'top' ? dy1 - end - len : door.handle === 'bottom' ? dy0 + end : dy0 + (dh - len) / 2;
+        const hx = door.hinge === 'left' ? da1 - 5 : da0 + 5;
+        for (const sy of [hy0 + 2.5, hy0 + len - 2.5]) {
+          b.cylinder(group, toPlan(f, hx, d + 1.5), sy, 0.6, 3, chrome, f.n, o);
+        }
+        b.cylinder(group, toPlan(f, hx, d + 4), hy0 + len / 2, 1.2, len, chrome, null, o);
+      }
+      if (item.id === b.selectedId) b.outline(group, localRect(f, a0, a1, 0, d + 5.2), y0, y1);
       return;
     }
     case 'washing_machine': {
@@ -373,28 +515,149 @@ function addItem(
     }
     case 'water_bar':
     case 'coffee_machine': {
+      // A real dispensing alcove (back column, overhanging head, side walls), drip tray, nozzle or spouts,
+      // controls on the head, and a glass / cup as the strongest "what is it" cue.
+      const coffee = item.category === 'coffee_machine';
       const top = y0 + counterThickness;
-      b.box(
+      const h = item.height;
+      const w = a1 - a0;
+      const mid = (a0 + a1) / 2;
+      const shell = b.finish(coffee ? 'glossBlack' : 'glossWhite');
+      const recess = Math.min(10, d * 0.3);
+      const headH = h * (coffee ? 0.32 : 0.36);
+      const headY = top + h - headH;
+      const side = Math.min(3, w * 0.12);
+      const [l0, l1] = [a0 + 0.5, a1 - 0.5];
+
+      b.roundedBox(group, localRect(f, l0, l1, 4, d - recess), top, top + h, shell, 2, o);
+      b.roundedBox(
         group,
-        localRect(f, a0 + 1, a1 - 1, 4, d),
-        top,
-        top + item.height,
-        item.category === 'water_bar' ? C.front : C.steel,
+        localRect(f, l0, l1, d - recess - 1, d),
+        headY,
+        top + h,
+        coffee ? b.finish('steel') : shell,
+        2,
         o,
       );
-      const w = a1 - a0;
-      b.box(
-        group,
-        localRect(f, a0 + w * 0.2, a1 - w * 0.2, d, d + 0.3),
-        top + item.height * 0.65,
-        top + item.height * 0.9,
-        C.dark,
-        { ...o, edges: false },
-      );
-      b.box(group, localRect(f, a0 + w * 0.3, a1 - w * 0.3, d - 12, d + 1), top, top + 1.5, C.handle, {
+      for (const [s0, s1] of [
+        [l0, l0 + side],
+        [l1 - side, l1],
+      ]) {
+        b.roundedBox(group, localRect(f, s0, s1, d - recess - 1, d), top, headY + 1, shell, 1, o);
+      }
+      b.box(group, localRect(f, l0 + side, l1 - side, d - recess, d - recess + 0.2), top, headY, C.dark, {
         ...o,
         edges: false,
       });
+
+      // Drip tray with slots.
+      const trayH = 2;
+      b.box(group, localRect(f, l0 + side, l1 - side, d - recess, d + 0.5), top, top + trayH, C.steel, {
+        ...o,
+        edges: false,
+      });
+      for (let k = 1; k <= 3; k++) {
+        const ax = l0 + side + ((l1 - l0 - 2 * side) * k) / 4;
+        b.box(
+          group,
+          localRect(f, ax - 0.3, ax + 0.3, d - recess + 1, d - 0.5),
+          top + trayH,
+          top + trayH + 0.05,
+          C.dark,
+          {
+            ...o,
+            edges: false,
+          },
+        );
+      }
+
+      // Nozzle (water) or twin spouts (coffee) under the head.
+      const spoutDepth = d - recess / 2;
+      if (coffee) {
+        b.roundedBox(
+          group,
+          localRect(f, mid - 3, mid + 3, spoutDepth - 2, spoutDepth + 2),
+          headY - 3,
+          headY,
+          b.finish('chrome'),
+          0.5,
+          o,
+        );
+        for (const dx of [-1.3, 1.3])
+          b.cylinder(group, toPlan(f, mid + dx, spoutDepth), headY - 4, 0.45, 2, b.finish('chrome'), null, o);
+      } else {
+        b.cylinder(group, toPlan(f, mid, spoutDepth), headY - 1.2, 0.7, 2.4, b.finish('chrome'), null, o);
+      }
+
+      // Glass or cup on the tray, sized to fit the alcove.
+      const room = headY - (top + trayH);
+      const r = Math.min(coffee ? 3.5 : 3, (w - 2 * side) * 0.3, recess * 0.4);
+      const ch = Math.min(coffee ? 7 : 10, room * 0.5);
+      const cupAt = toPlan(f, mid, spoutDepth);
+      b.cylinder(group, cupAt, top + trayH + ch / 2, r, ch, b.finish(coffee ? 'ceramic' : 'waterGlass'), null, o);
+      if (coffee) {
+        const handleAt = toPlan(f, mid + r + 0.8, spoutDepth);
+        b.cylinder(group, handleAt, top + trayH + ch / 2, 0.5, ch * 0.5, b.finish('ceramic'), null, o);
+      }
+
+      // Controls on the head front.
+      const front = d + 0.15;
+      if (coffee) {
+        b.box(
+          group,
+          localRect(f, mid - w * 0.22, mid + w * 0.22, d, front),
+          headY + headH * 0.35,
+          headY + headH * 0.8,
+          C.dark,
+          {
+            ...o,
+            edges: false,
+          },
+        );
+        b.roundedBox(
+          group,
+          localRect(f, mid - w * 0.2, mid + w * 0.2, d, front + 0.1),
+          headY + headH * 0.4,
+          headY + headH * 0.75,
+          b.finish('screen'),
+          0.2,
+          o,
+        );
+        // Bean hopper lid on top, towards the back.
+        b.roundedBox(
+          group,
+          localRect(f, a0 + w * 0.12, a0 + w * 0.55, 6, 6 + Math.min(14, d * 0.35)),
+          top + h,
+          top + h + 1.2,
+          b.finish('glossBlack'),
+          0.5,
+          o,
+        );
+      } else {
+        b.roundedBox(
+          group,
+          localRect(f, l0 + side, l1 - side, d, front + 0.1),
+          headY + headH * 0.45,
+          headY + headH * 0.8,
+          b.finish('blackGlass'),
+          0.3,
+          o,
+        );
+        for (const fx of [-0.25, 0, 0.25]) {
+          const lx = mid + fx * (w - 2 * side);
+          b.roundedBox(
+            group,
+            localRect(f, lx - 0.6, lx + 0.6, front + 0.1, front + 0.3),
+            headY + headH * 0.6,
+            headY + headH * 0.66,
+            b.finish('led'),
+            0.1,
+            o,
+          );
+        }
+      }
+      if (item.id === b.selectedId)
+        b.outline(group, localRect(f, a0, a1, 4, d + 0.5), top, top + h + (coffee ? 1.2 : 0));
       return;
     }
   }
@@ -479,8 +742,12 @@ function addWall(b: Builder, root: THREE.Group, data: ProjectData, run: WallRun)
   root.add(group);
 }
 
-export function buildKitchen(data: ProjectData, selectedId: string | null): THREE.Group {
-  const b = new Builder(selectedId);
+export function buildKitchen(
+  data: ProjectData,
+  selectedId: string | null,
+  envMap: THREE.Texture | null = null,
+): THREE.Group {
+  const b = new Builder(selectedId, envMap);
   const root = new THREE.Group();
   const { room } = data;
 

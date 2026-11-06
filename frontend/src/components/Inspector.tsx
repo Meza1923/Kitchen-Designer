@@ -1,10 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Copy, Lock, Plus, Trash2, Unlock, X } from 'lucide-react';
-import type { KitchenItem, TallZoneConfig, TallZoneType, WallRun } from '../types';
+import type { FridgeType, KitchenItem, TallZoneConfig, TallZoneType, WallRun } from '../types';
+import type { Violation } from '../lib/rules';
+import { ProblemsList } from './ProblemsList';
 import {
   CATEGORY_LABELS,
   DEPTH_PRESETS,
   equalSplit,
+  FRIDGE_TYPE_LABELS,
+  FILLER_WIDTH_PRESETS,
+  defaultOpenShelves,
+  FRIDGE_WIDTHS,
   makeZone,
   SIDE_LABELS,
   SOCKET_HEIGHT_PRESETS,
@@ -326,12 +332,26 @@ interface Props {
   onMoveToWall: (wallId: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  /** Rule violations involving this item. */
+  problems: Violation[];
+  onFix: (v: Violation) => void;
 }
 
-export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplicate, onDelete }: Props) {
+export function Inspector({
+  wall,
+  walls,
+  item,
+  onChange,
+  onMoveToWall,
+  onDuplicate,
+  onDelete,
+  problems,
+  onFix,
+}: Props) {
   const [yUnlocked, setYUnlocked] = useState(false);
   useEffect(() => setYUnlocked(false), [item.id]);
   const layer = layerOf(item.category);
+  const widthPresets = item.category === 'filler' ? FILLER_WIDTH_PRESETS : WIDTH_PRESETS;
   const fromRight = round1(wall.widthCm - item.x - item.width);
   const maxX = Math.max(0, wall.widthCm - item.width);
 
@@ -347,6 +367,11 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
           value={item.label ?? ''}
           onChange={(e) => onChange({ label: e.target.value || undefined })}
         />
+        {problems.length > 0 && (
+          <div className="mt-3">
+            <ProblemsList violations={problems} title="Problems with this element" onFix={onFix} />
+          </div>
+        )}
       </div>
 
       <Section title="Position & Size">
@@ -419,19 +444,23 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
           <>
             <Field label="Width">
               <Chips
-                options={WIDTH_PRESETS}
-                value={WIDTH_PRESETS.includes(item.width) ? item.width : null}
+                options={widthPresets}
+                value={widthPresets.includes(item.width) ? item.width : null}
                 onChange={(width) => onChange({ width })}
               />
               <NumField
                 className="mt-1.5"
                 value={item.width}
-                min={5}
+                min={item.category === 'filler' ? 1 : 5}
                 max={wall.widthCm}
                 onChange={(width) => onChange({ width })}
               />
             </Field>
-            <Field label={item.category === 'sink' ? 'Basin depth (vertical)' : 'Height'}>
+            <Field
+              label={
+                item.category === 'sink' ? 'Basin depth (vertical)' : item.category === 'shelf' ? 'Thickness' : 'Height'
+              }
+            >
               <NumField value={item.height} min={1} max={wall.heightCm} onChange={(height) => onChange({ height })} />
             </Field>
           </>
@@ -491,22 +520,39 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
       {hasCabinetFronts(item.category) && (
         <Section title="Cabinet Fronts">
           <Chips
-            options={['doors', 'drawers'] as ('doors' | 'drawers')[]}
+            options={['doors', 'drawers', 'open'] as KitchenItem['frontType'][]}
             value={item.frontType}
-            onChange={(frontType) => onChange({ frontType })}
-            render={(v) => (v === 'doors' ? 'Doors' : 'Drawers')}
+            onChange={(frontType) =>
+              onChange(
+                frontType === 'open' && item.shelfCount === undefined
+                  ? { frontType, shelfCount: defaultOpenShelves(item.category) }
+                  : { frontType },
+              )
+            }
+            render={(v) => ({ doors: 'Doors', drawers: 'Drawers', open: 'Open' })[v]}
           />
-          {item.frontType === 'doors' ? (
-            <Field label="Doors">
-              <Chips
-                options={[1, 2] as (1 | 2)[]}
-                value={item.doorCount}
-                onChange={(doorCount) => onChange({ doorCount })}
-                render={(n) => `${n} Door${n > 1 ? 's' : ''}`}
-              />
-            </Field>
-          ) : (
+          {item.frontType === 'drawers' ? (
             <DrawerConfig item={item} onChange={onChange} />
+          ) : (
+            <>
+              {item.frontType === 'doors' && (
+                <Field label="Doors">
+                  <Chips
+                    options={[1, 2] as (1 | 2)[]}
+                    value={item.doorCount}
+                    onChange={(doorCount) => onChange({ doorCount })}
+                    render={(n) => `${n} Door${n > 1 ? 's' : ''}`}
+                  />
+                </Field>
+              )}
+              <Field label="Shelves inside">
+                <Chips
+                  options={[0, 1, 2, 3, 4, 5]}
+                  value={item.shelfCount ?? 0}
+                  onChange={(shelfCount) => onChange({ shelfCount: shelfCount || undefined })}
+                />
+              </Field>
+            </>
           )}
         </Section>
       )}
@@ -514,6 +560,16 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
       {item.category === 'tall_cabinet' && (
         <Section title={`Tower Zones (box ${fmt(boxHeight(item))} cm)`}>
           <TallZones item={item} onChange={onChange} />
+          {item.tallZones?.some((z) => z.type === 'door') && (
+            <Field label="Door hinge side">
+              <Chips
+                options={['left', 'right'] as ('left' | 'right')[]}
+                value={item.doorHinge ?? 'left'}
+                onChange={(doorHinge) => onChange({ doorHinge })}
+                render={(v) => (v === 'left' ? 'Left' : 'Right')}
+              />
+            </Field>
+          )}
         </Section>
       )}
 
@@ -586,6 +642,23 @@ export function Inspector({ wall, walls, item, onChange, onMoveToWall, onDuplica
               value={item.doorSwing ?? 'in'}
               onChange={(doorSwing) => onChange({ doorSwing })}
               render={(v) => (v === 'in' ? 'Into the room' : 'Out of the room')}
+            />
+          </Field>
+        </Section>
+      )}
+
+      {item.category === 'fridge' && (
+        <Section title="Fridge">
+          <Field label="Type">
+            <Chips
+              options={Object.keys(FRIDGE_TYPE_LABELS) as FridgeType[]}
+              value={item.fridgeType ?? 'side_by_side'}
+              onChange={(fridgeType) => {
+                // Follow the type's default width unless the width was changed by hand.
+                const atDefault = item.width === FRIDGE_WIDTHS[item.fridgeType ?? 'side_by_side'];
+                onChange({ fridgeType, ...(atDefault ? { width: FRIDGE_WIDTHS[fridgeType] } : {}) });
+              }}
+              render={(t) => FRIDGE_TYPE_LABELS[t]}
             />
           </Field>
         </Section>

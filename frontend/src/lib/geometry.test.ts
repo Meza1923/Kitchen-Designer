@@ -9,6 +9,7 @@ import {
   computeSocketIssues,
   computeUnsupported,
   findFreeX,
+  fridgeDoors,
   layerOf,
   normalizeWall,
   snapX,
@@ -262,4 +263,57 @@ describe('findFreeX', () => {
 
 it('DEFAULT_BASE_HEIGHT matches the default base cabinet', () => {
   expect(createItem('base_cabinet').height).toBe(DEFAULT_BASE_HEIGHT);
+});
+
+describe('fridgeDoors', () => {
+  it.each([
+    ['side_by_side', 2],
+    ['french_door', 4],
+    ['top_bottom', 2],
+  ] as const)('%s has %i doors that exactly cover the front', (type, count) => {
+    const doors = fridgeDoors(type);
+    expect(doors).toHaveLength(count);
+    const area = doors.reduce((sum, d) => sum + (d.fx1 - d.fx0) * (d.fy1 - d.fy0), 0);
+    expect(area).toBeCloseTo(1);
+    for (const d of doors) expect(d.fx0 >= 0 && d.fx1 <= 1 && d.fy0 >= 0 && d.fy1 <= 1).toBe(true);
+  });
+
+  it('defaults to side-by-side for fridges saved before fridge types', () => {
+    expect(fridgeDoors(undefined)).toEqual(fridgeDoors('side_by_side'));
+  });
+
+  it('stacks the top/bottom doors with the larger fridge on top', () => {
+    const [freezer, fridge] = fridgeDoors('top_bottom');
+    expect(freezer.fy1).toBe(fridge.fy0);
+    expect(fridge.fy1 - fridge.fy0).toBeGreaterThan(freezer.fy1 - freezer.fy0);
+  });
+});
+
+describe('fillers', () => {
+  const run = () =>
+    wall(
+      [item('base_cabinet', { x: 0 }), item('filler', { id: 'f', x: 60, width: 5 }), item('base_cabinet', { x: 65 })],
+      125,
+    );
+
+  it('close the gap between units, so there is no gap warning', () => {
+    expect(computeGaps(run(), 'floor')).toEqual([]);
+    expect(computeGaps(wall([item('base_cabinet', { x: 0 }), item('base_cabinet', { x: 65 })], 125), 'floor')).toEqual([
+      expect.objectContaining({ x0: 60, x1: 65, warning: true }),
+    ]);
+  });
+
+  it('carry the countertop across', () => {
+    expect(computeCountertops(run())).toEqual([{ x: 0, width: 125, y: 87, thickness: 3 }]);
+  });
+
+  it('collide with other floor units', () => {
+    const w = wall([item('base_cabinet', { id: 'b', x: 0 }), item('filler', { id: 'f', x: 58 })]);
+    expect(computeOverlaps(w).map((o) => [o.a, o.b])).toEqual([['b', 'f']]);
+  });
+
+  it('never host a new sink or cooktop', () => {
+    const w = wall([item('filler', { x: 0, width: 60 }), item('base_cabinet', { x: 60 })]);
+    expect(findFreeX(w, item('sink'))).toBe(60);
+  });
 });

@@ -1,18 +1,8 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import { SIDE_LABELS } from '../lib/defaults';
+import { computeGaps, fmt, isElectrical, isOpening, layerOf } from '../lib/geometry';
 import {
-  computeGaps,
-  computeOverlaps,
-  computeSocketIssues,
-  computeUnsupported,
-  fmt,
-  isElectrical,
-  isOpening,
-  layerOf,
-} from '../lib/geometry';
-import {
-  computePlanConflicts,
   countertopRects,
   islandRect,
   itemPlanRect,
@@ -23,7 +13,8 @@ import {
   type Frame,
   type Rect,
 } from '../lib/plan';
-import { Badge, DimH, DimV, Label, SELECT, WARN } from './Drawing';
+import { severityByItem, type Violation } from '../lib/rules';
+import { AMBER, Badge, DimH, DimV, Label, SELECT, WARN } from './Drawing';
 import { FONT, INK, THIN } from './ItemShape';
 
 export const PLAN_PAD = 90;
@@ -42,6 +33,8 @@ const SHORT: Record<KitchenItem['category'], string> = {
   upper_cabinet: 'U',
   tall_cabinet: 'T',
   corner_blocker: 'CB',
+  shelf: 'SH',
+  filler: 'F',
   fridge: 'REF',
   washing_machine: 'WM',
   under_counter_oven: 'OV',
@@ -64,6 +57,8 @@ export interface PlanDrawingProps {
   interactive?: boolean;
   onItemPointerDown?: (e: ReactPointerEvent, run: WallRun, item: KitchenItem) => void;
   onRunPointerDown?: (e: ReactPointerEvent, run: WallRun) => void;
+  /** Rule violations for the project (see lib/rules.ts). */
+  violations: Violation[];
 }
 
 export function PlanDrawing({
@@ -73,6 +68,7 @@ export function PlanDrawing({
   interactive,
   onItemPointerDown,
   onRunPointerDown,
+  violations,
 }: PlanDrawingProps) {
   const { room } = data;
   const W = room.widthCm * S;
@@ -80,13 +76,9 @@ export function PlanDrawing({
   const t = T * S;
   const px = (r: Rect) => ({ x: r.x * S, y: r.y * S, width: r.w * S, height: r.h * S });
   const runs = data.walls.map((run) => ({ run, f: wallFrame(room, run) }));
-  const conflicts = computePlanConflicts(data);
-  const flagged = new Set<string>([
-    ...conflicts.flatMap((c) => [c.a, c.b ?? '']),
-    ...data.walls.flatMap((w) => computeOverlaps(w).flatMap((o) => [o.a, o.b])),
-    ...data.walls.flatMap((w) => computeUnsupported(w).map((i) => i.id)),
-    ...data.walls.flatMap((w) => computeSocketIssues(w).map((s) => s.item.id)),
-  ]);
+  // Gap warnings have their own marker below; everything else is framed / hatched generically.
+  const shown = violations.filter((v) => v.severity !== 'info' && v.rule !== 'narrow_gap');
+  const flagged = severityByItem(shown);
   const active = data.activeWallId;
   const present = (side: string) => data.walls.some((w) => w.kind === 'wall' && w.side === side && !w.removed);
   const [hasN, hasE, hasS, hasW] = ['north', 'east', 'south', 'west'].map(present);
@@ -258,6 +250,10 @@ export function PlanDrawing({
           <rect width="6" height="6" fill="#fee2e2" />
           <line x1="0" y1="0" x2="0" y2="6" stroke={WARN} strokeWidth="2" />
         </pattern>
+        <pattern id="planAmberHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" fill="#fee2e2" />
+          <line x1="0" y1="0" x2="0" y2="6" stroke={AMBER} strokeWidth="2" />
+        </pattern>
       </defs>
 
       <g transform={`translate(${planOrigin(S)} ${planOrigin(S)})`}>
@@ -349,7 +345,7 @@ export function PlanDrawing({
         {/* Upper cabinets: dashed (above the cut plane) */}
         {runs.flatMap(({ run, f }) =>
           run.items
-            .filter((i) => i.category === 'upper_cabinet')
+            .filter((i) => i.category === 'upper_cabinet' || i.category === 'shelf')
             .map((item) => {
               const r = itemPlanRect(f, item);
               return (
@@ -535,8 +531,8 @@ export function PlanDrawing({
                 const c = toPlan(f, (g.x0 + g.x1) / 2, (layer === 'floor' ? 60 : 35) + 8);
                 return (
                   <g key={`${run.id}-${layer}-gap-${i}`} style={{ pointerEvents: 'none' }}>
-                    <rect {...px(r)} fill="url(#planWarnHatch)" stroke={WARN} strokeWidth={1} />
-                    <Badge x={c.x * S} y={c.y * S} text={`! GAP ${g.width.toFixed(1)} cm`} />
+                    <rect {...px(r)} fill="url(#planAmberHatch)" stroke={AMBER} strokeWidth={1} />
+                    <Badge x={c.x * S} y={c.y * S} text={`! GAP ${g.width.toFixed(1)} cm`} color={AMBER} />
                   </g>
                 );
               }),
@@ -555,7 +551,7 @@ export function PlanDrawing({
                   width={r.w * S + 4}
                   height={r.h * S + 4}
                   fill="none"
-                  stroke={WARN}
+                  stroke={flagged.get(item.id) === 'error' ? WARN : AMBER}
                   strokeWidth={2}
                   strokeDasharray="6 3"
                   style={{ pointerEvents: 'none' }}
@@ -563,20 +559,26 @@ export function PlanDrawing({
               );
             }),
         )}
-        {conflicts.map((c, i) => (
-          <g key={`conf-${i}`} style={{ pointerEvents: 'none' }}>
-            {c.kind === 'outside' && (
-              <rect {...px(c.rect)} fill="none" stroke={WARN} strokeWidth={2} strokeDasharray="6 3" />
-            )}
-            {c.kind === 'clash' && <rect {...px(c.rect)} fill="url(#planWarnHatch)" fillOpacity={0.8} />}
-            {c.kind === 'swing' && <rect {...px(c.rect)} fill="url(#planWarnHatch)" fillOpacity={0.6} />}
-            <Badge
-              x={(c.rect.x + c.rect.w / 2) * S}
-              y={(c.rect.y + c.rect.h / 2) * S}
-              text={{ clash: 'CLASH', outside: 'OUTSIDE ROOM', swing: 'DOOR SWING' }[c.kind]}
-            />
-          </g>
-        ))}
+        {shown
+          .filter((v) => v.planArea)
+          .map((v, i) => {
+            const r = v.planArea!;
+            const color = v.severity === 'error' ? WARN : AMBER;
+            return (
+              <g key={`viol-${i}`} style={{ pointerEvents: 'none' }}>
+                {v.rule === 'outside_room' ? (
+                  <rect {...px(r)} fill="none" stroke={color} strokeWidth={2} strokeDasharray="6 3" />
+                ) : (
+                  <rect
+                    {...px(r)}
+                    fill={`url(#${v.severity === 'error' ? 'planWarnHatch' : 'planAmberHatch'})`}
+                    fillOpacity={0.7}
+                  />
+                )}
+                <Badge x={(r.x + r.w / 2) * S} y={(r.y + r.h / 2) * S} text={v.badge} color={color} />
+              </g>
+            );
+          })}
 
         {/* Selection */}
         {interactive &&

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { KitchenItem, TallZoneConfig } from '../types';
-import { boxHeight, fmt, layerOf, toScreenY } from '../lib/geometry';
+import { boxHeight, fmt, fridgeDoors, layerOf, toScreenY } from '../lib/geometry';
 
 export const INK = '#1e293b';
 export const THIN = '#475569';
@@ -153,7 +153,32 @@ function frontsBox(item: KitchenItem, ctx: ShapeContext): { outer: Box; fronts: 
   return { outer, fronts, plinth };
 }
 
+/** Shelf boards at equal spacing inside box `b`: solid when the cabinet is open, dashed (hidden) behind doors. */
+function Shelves({ b, count, hidden }: { b: Box; count: number; hidden: boolean }) {
+  return (
+    <g>
+      {Array.from({ length: count }, (_, k) => {
+        const y = b.y + (b.h * (k + 1)) / (count + 1);
+        return hidden ? (
+          <line key={k} x1={b.x + 3} y1={y} x2={b.x + b.w - 3} y2={y} {...HIDDEN} />
+        ) : (
+          <rect key={k} x={b.x} y={y - 1.5} width={b.w} height={3} fill="#ffffff" stroke={INK} strokeWidth={1} />
+        );
+      })}
+    </g>
+  );
+}
+
 function CabinetFronts({ item, b, scale, upper }: { item: KitchenItem; b: Box; scale: number; upper: boolean }) {
+  const shelves = item.shelfCount ?? 0;
+  if (item.frontType === 'open') {
+    return (
+      <g>
+        <rect x={b.x} y={b.y} width={b.w} height={b.h} fill="#e2e8f0" stroke={THIN} strokeWidth={1} />
+        <Shelves b={b} count={shelves} hidden={false} />
+      </g>
+    );
+  }
   if (item.frontType === 'drawers') {
     const pcts =
       item.drawerSplitPcts.length === item.drawerCount ? item.drawerSplitPcts : Array(item.drawerCount).fill(1);
@@ -166,10 +191,16 @@ function CabinetFronts({ item, b, scale, upper }: { item: KitchenItem; b: Box; s
       <g>
         <Door b={{ ...b, w: half }} hinge="left" handleAt={handleAt} />
         <Door b={{ ...b, x: b.x + half + REVEAL, w: half }} hinge="right" handleAt={handleAt} />
+        <Shelves b={b} count={shelves} hidden />
       </g>
     );
   }
-  return <Door b={b} hinge="left" handleAt={handleAt} />;
+  return (
+    <g>
+      <Door b={b} hinge="left" handleAt={handleAt} />
+      <Shelves b={b} count={shelves} hidden />
+    </g>
+  );
 }
 
 /** Front of a coffee machine (freestanding or built-in) inside box `b`. */
@@ -204,11 +235,119 @@ function CoffeeFront({ b, framed }: { b: Box; framed: boolean }) {
   );
 }
 
-function TallZone({ zone, b, scale }: { zone: TallZoneConfig; b: Box; scale: number }) {
+/**
+ * Countertop water bar / coffee machine, matching the 3D model: head with controls, a recessed dispensing
+ * alcove between side walls, nozzle (water) or twin spouts (coffee), a slotted drip tray and a glass / cup.
+ */
+function CounterAppliance({ b, coffee }: { b: Box; coffee: boolean }) {
+  const cx = b.x + b.w / 2;
+  const headH = b.h * (coffee ? 0.32 : 0.36);
+  const headY = b.y + headH; // bottom of the head, in SVG y
+  const side = Math.max(2.5, b.w * 0.1);
+  const trayH = Math.max(2, b.h * 0.05);
+  const alcove = { x: b.x + side, y: headY, w: b.w - 2 * side, h: b.y + b.h - trayH - headY };
+  const cupW = Math.min(alcove.w * 0.38, coffee ? 16 : 12);
+  const cupH = Math.min(alcove.h * (coffee ? 0.32 : 0.45), coffee ? 14 : 20);
+  const cupY = alcove.y + alcove.h - cupH;
+  return (
+    <g>
+      <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={4} {...OUTLINE} />
+      {coffee && (
+        <rect
+          x={b.x + b.w * 0.12}
+          y={b.y - 2}
+          width={b.w * 0.43}
+          height={3}
+          rx={1.5}
+          fill="#e2e8f0"
+          stroke={INK}
+          strokeWidth={1}
+        />
+      )}
+      {/* Head: display (coffee) or touch strip with buttons (water) */}
+      <line x1={b.x} y1={headY} x2={b.x + b.w} y2={headY} stroke={INK} strokeWidth={1.25} />
+      {coffee ? (
+        <>
+          <rect
+            x={cx - b.w * 0.22}
+            y={b.y + headH * 0.3}
+            width={b.w * 0.44}
+            height={headH * 0.4}
+            rx={1.5}
+            fill="#e0f2fe"
+            stroke={INK}
+            strokeWidth={1}
+          />
+          {[0.12, 0.88].map((f) => (
+            <circle key={f} cx={b.x + b.w * f} cy={b.y + headH * 0.5} r={Math.min(2.5, b.w * 0.04)} {...LINE} />
+          ))}
+        </>
+      ) : (
+        <>
+          <rect x={alcove.x} y={b.y + headH * 0.3} width={alcove.w} height={headH * 0.32} rx={1.5} fill={INK} />
+          {[-0.25, 0, 0.25].map((f) => (
+            <circle key={f} cx={cx + f * alcove.w} cy={b.y + headH * 0.46} r={1.1} fill="#e0f2fe" />
+          ))}
+        </>
+      )}
+      {/* Alcove */}
+      <rect x={alcove.x} y={alcove.y} width={alcove.w} height={alcove.h} fill="#e2e8f0" stroke={THIN} strokeWidth={1} />
+      {coffee ? (
+        <>
+          <rect x={cx - 4} y={headY} width={8} height={3} fill="#ffffff" stroke={INK} strokeWidth={1} />
+          {[-1.8, 1.8].map((dx) => (
+            <line key={dx} x1={cx + dx} y1={headY + 3} x2={cx + dx} y2={headY + 6} stroke={INK} strokeWidth={1.25} />
+          ))}
+        </>
+      ) : (
+        <line x1={cx} y1={headY} x2={cx} y2={headY + 4} stroke={INK} strokeWidth={2} />
+      )}
+      {coffee ? (
+        <g>
+          <path
+            d={`M ${cx - cupW / 2} ${cupY} h ${cupW} l -1.5 ${cupH} h ${-(cupW - 3)} Z`}
+            fill="#ffffff"
+            stroke={INK}
+            strokeWidth={1.25}
+          />
+          <path
+            d={`M ${cx + cupW / 2 - 0.5} ${cupY + cupH * 0.25} q ${cupW * 0.3} 0 ${cupW * 0.3} ${cupH * 0.3} t ${-cupW * 0.35} ${cupH * 0.3}`}
+            fill="none"
+            stroke={INK}
+            strokeWidth={1.25}
+          />
+        </g>
+      ) : (
+        <path
+          d={`M ${cx - cupW / 2} ${cupY} h ${cupW} l -1.5 ${cupH} h ${-(cupW - 3)} Z`}
+          fill="#bae6fd"
+          fillOpacity={0.6}
+          stroke={INK}
+          strokeWidth={1.25}
+        />
+      )}
+      {/* Drip tray with slots */}
+      <rect
+        x={alcove.x - 1}
+        y={b.y + b.h - trayH}
+        width={alcove.w + 2}
+        height={trayH}
+        fill="#cbd5e1"
+        stroke={INK}
+        strokeWidth={1}
+      />
+      <Txt x={cx} y={b.y + headH * 0.18 + 2} size={b.w > 70 ? 7 : 5.5} weight={700}>
+        {coffee ? 'COFFEE' : 'WATER'}
+      </Txt>
+    </g>
+  );
+}
+
+function TallZone({ zone, b, scale, hinge }: { zone: TallZoneConfig; b: Box; scale: number; hinge: 'left' | 'right' }) {
   const cx = b.x + b.w / 2;
   switch (zone.type) {
     case 'door':
-      return <Door b={b} hinge="left" handleAt="middle" />;
+      return <Door b={b} hinge={hinge} handleAt="middle" />;
     case 'drawers':
       return <Drawers b={b} pcts={Array(Math.max(1, zone.drawerCount ?? 3)).fill(1)} scale={scale} />;
     case 'oven': {
@@ -316,8 +455,47 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
             const h = (z.heightPct / total) * fronts.h;
             bottom -= h;
             const b = { x: fronts.x, y: bottom + REVEAL / 2, w: fronts.w, h: h - REVEAL };
-            return <TallZone key={z.id} zone={z} b={b} scale={S} />;
+            return <TallZone key={z.id} zone={z} b={b} scale={S} hinge={item.doorHinge ?? 'left'} />;
           })}
+        </g>
+      );
+    }
+    case 'shelf': {
+      // Open wall shelf: the board with two brackets underneath.
+      const bracket = Math.max(5, Math.min(ob.w * 0.12, 4 * S));
+      return (
+        <g>
+          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} fill="#f1f5f9" stroke={INK} strokeWidth={1.5} />
+          {[0.15, 0.85].map((f) => {
+            const bx = ob.x + ob.w * f;
+            return (
+              <path
+                key={f}
+                d={`M ${bx} ${ob.y + ob.h} v ${bracket} l ${bracket * 0.8} ${-bracket} Z`}
+                fill="none"
+                stroke={INK}
+                strokeWidth={1.25}
+              />
+            );
+          })}
+        </g>
+      );
+    }
+    case 'filler': {
+      // A plain panel flush with the cabinet fronts: no doors, no handle.
+      const { outer, plinth } = frontsBox(item, ctx);
+      return (
+        <g>
+          <rect
+            x={outer.x}
+            y={outer.y}
+            width={outer.w}
+            height={outer.h - plinth}
+            fill="#f1f5f9"
+            stroke={INK}
+            strokeWidth={1.5}
+          />
+          <Plinth x={outer.x} w={outer.w} bottom={outer.y + outer.h} h={plinth} />
         </g>
       );
     }
@@ -355,18 +533,86 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
       );
     }
     case 'fridge': {
-      const half = (ob.w - 3 * REVEAL) / 2;
+      // Appliance cues (vs. a cabinet): rounded doors with a seal line, tubular bar handles on stand-offs,
+      // hinge caps on top and a ventilation grille at the bottom.
+      const gap = 2 * REVEAL;
+      const grille = Math.max(6, Math.min(ob.h * 0.045, 14));
+      const ax = ob.x + REVEAL;
+      const aw = ob.w - 2 * REVEAL;
       const top = ob.y + REVEAL;
-      const h = ob.h - 2 * REVEAL - 6;
+      const h = ob.h - 2 * REVEAL - grille;
+      const doors = fridgeDoors(item.fridgeType).map((d) => {
+        const x = ax + d.fx0 * aw + (d.fx0 > 0 ? gap / 2 : 0);
+        const y = top + (1 - d.fy1) * h + (d.fy1 < 1 ? gap / 2 : 0);
+        const w = ax + d.fx1 * aw - (d.fx1 < 1 ? gap / 2 : 0) - x;
+        const dh = top + (1 - d.fy0) * h - (d.fy0 > 0 ? gap / 2 : 0) - y;
+        const bar = Math.max(2.5, Math.min(w * 0.05, 4.5));
+        const inset = Math.min(w * 0.12, 9);
+        const hx = d.hinge === 'left' ? x + w - inset - bar : x + inset;
+        const len = Math.min(dh * (d.handle === 'middle' ? 0.45 : 0.55), h * 0.4);
+        const end = Math.min(dh * 0.08, 14);
+        const hy = d.handle === 'top' ? y + end : d.handle === 'bottom' ? y + dh - end - len : y + (dh - len) / 2;
+        return { ...d, x, y, w, dh, hx, hy, len, bar };
+      });
+      const slots = Math.max(3, Math.floor((ob.w * 0.6) / 5));
+      const slotY = top + h + REVEAL;
       return (
         <g>
-          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} rx={3} {...OUTLINE} />
-          <rect x={ob.x + REVEAL} y={top} width={half} height={h} {...LINE} />
-          <rect x={ob.x + 2 * REVEAL + half} y={top} width={half} height={h} {...LINE} />
-          <line x1={cx - 5} y1={top + h * 0.3} x2={cx - 5} y2={top + h * 0.6} stroke={INK} strokeWidth={2.5} />
-          <line x1={cx + 5} y1={top + h * 0.3} x2={cx + 5} y2={top + h * 0.6} stroke={INK} strokeWidth={2.5} />
-          <line x1={ob.x + 4} y1={ob.y + ob.h - 4} x2={ob.x + ob.w - 4} y2={ob.y + ob.h - 4} {...LINE} />
-          <Txt x={cx} y={top + 16} size={10} weight={700}>
+          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} rx={4} {...OUTLINE} />
+          {doors.map((d, i) => (
+            <g key={i}>
+              <rect x={d.x} y={d.y} width={d.w} height={d.dh} rx={3} fill="#f8fafc" stroke={INK} strokeWidth={1.25} />
+              <rect
+                x={d.x + 2.5}
+                y={d.y + 2.5}
+                width={Math.max(0, d.w - 5)}
+                height={Math.max(0, d.dh - 5)}
+                rx={2}
+                fill="none"
+                stroke="#cbd5e1"
+                strokeWidth={0.75}
+              />
+              {/* Stand-offs, then the bar itself */}
+              {[d.hy + 1.5, d.hy + d.len - 1.5].map((sy) => (
+                <line key={sy} x1={d.hx - 1} y1={sy} x2={d.hx + d.bar + 1} y2={sy} stroke={INK} strokeWidth={1.5} />
+              ))}
+              <rect
+                x={d.hx}
+                y={d.hy}
+                width={d.bar}
+                height={d.len}
+                rx={d.bar / 2}
+                fill="#e2e8f0"
+                stroke={INK}
+                strokeWidth={1.25}
+              />
+              {d.fy1 === 1 && (
+                <rect
+                  x={d.hinge === 'left' ? d.x + 3 : d.x + d.w - 11}
+                  y={ob.y - 0.5}
+                  width={8}
+                  height={3}
+                  rx={1}
+                  fill={INK}
+                />
+              )}
+            </g>
+          ))}
+          {Array.from({ length: slots }, (_, i) => {
+            const sx = cx - ((slots - 1) * 5) / 2 + i * 5;
+            return (
+              <line
+                key={i}
+                x1={sx}
+                y1={slotY + grille * 0.2}
+                x2={sx}
+                y2={slotY + grille * 0.75}
+                stroke={THIN}
+                strokeWidth={1.25}
+              />
+            );
+          })}
+          <Txt x={cx} y={top + 14} size={8} weight={700}>
             FRIDGE
           </Txt>
         </g>
@@ -514,45 +760,9 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
         </g>
       );
     }
-    case 'water_bar': {
-      const head = Math.min(ob.h * 0.32, 30);
-      const glassW = Math.min(ob.w * 0.36, 12);
-      const glassH = Math.min(ob.h * 0.28, 16);
-      const trayY = ob.y + ob.h - 5;
-      return (
-        <g>
-          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} rx={3} {...OUTLINE} />
-          <rect
-            x={ob.x + 4}
-            y={ob.y + 4}
-            width={ob.w - 8}
-            height={head - 6}
-            rx={2}
-            fill="#f1f5f9"
-            stroke={THIN}
-            strokeWidth={1}
-          />
-          <line x1={cx} y1={ob.y + head} x2={cx} y2={ob.y + head + 6} stroke={INK} strokeWidth={2.5} />
-          <path
-            d={`M ${cx - glassW / 2} ${trayY - glassH} h ${glassW} l -1.5 ${glassH} h ${-(glassW - 3)} Z`}
-            fill="#e0f2fe"
-            stroke={INK}
-            strokeWidth={1.25}
-          />
-          <line x1={ob.x + 3} y1={trayY} x2={ob.x + ob.w - 3} y2={trayY} stroke={INK} strokeWidth={1.5} />
-          <Txt x={cx} y={ob.y + head / 2} size={6.5} weight={700}>
-            WATER
-          </Txt>
-        </g>
-      );
-    }
+    case 'water_bar':
     case 'coffee_machine':
-      return (
-        <g>
-          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} rx={2} {...OUTLINE} />
-          <CoffeeFront b={ob} framed={false} />
-        </g>
-      );
+      return <CounterAppliance b={ob} coffee={item.category === 'coffee_machine'} />;
     case 'door': {
       const trim = 2.5 * S;
       const hingeLeft = item.doorHinge !== 'right';

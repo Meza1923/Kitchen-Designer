@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Box,
@@ -24,7 +24,9 @@ import { clampX, findFreeX, isWallMounted, layerOf, normalizeWall } from './lib/
 import { api } from './lib/api';
 import { migrateProjectData } from './lib/migrate';
 import { syncRoom } from './lib/plan';
-import { exportJson, exportPng, importJson, printPdf, scheduleRows, wallWarnings } from './lib/export';
+import { exportJson, exportPng, importJson, printPdf, scheduleRows } from './lib/export';
+import { applyAllFixes, checkProject, type Violation } from './lib/rules';
+import { ProblemsList } from './components/ProblemsList';
 import { Canvas } from './components/Canvas';
 import { PlanCanvas } from './components/PlanCanvas';
 import { Inspector } from './components/Inspector';
@@ -75,23 +77,27 @@ const loadedProject = (p: Pick<ProjectState, 'id' | 'name' | 'data' | 'savedAt' 
 const freshProject = (): ProjectState =>
   loadedProject({ id: null, name: 'Untitled Kitchen', data: createProjectData(), savedAt: null, dirty: false });
 
-function WallOverview({ wall, onSelect }: { wall: WallRun; onSelect: (id: string) => void }) {
+function WallOverview({
+  wall,
+  violations,
+  onSelect,
+  onSelectProblem,
+  onFix,
+  onFixAll,
+}: {
+  wall: WallRun;
+  violations: Violation[];
+  onSelect: (id: string) => void;
+  onSelectProblem: (runId: string, itemId: string) => void;
+  onFix: (v: Violation) => void;
+  onFixAll: () => void;
+}) {
   const rows = scheduleRows(wall);
   const sorted = [...wall.items].sort((a, b) => a.x - b.x || a.y - b.y);
-  const warnings = wallWarnings(wall);
   return (
     <div className="px-4 py-3">
       <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-700">{wall.name} · Schedule</h3>
-      {warnings.length > 0 && (
-        <div className="mb-3 space-y-1 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-          {warnings.map((w, i) => (
-            <div key={i} className="flex gap-1.5">
-              <AlertTriangle size={13} className="mt-px shrink-0" />
-              {w}
-            </div>
-          ))}
-        </div>
-      )}
+      <ProblemsList violations={violations} onSelect={onSelectProblem} onFix={onFix} onFixAll={onFixAll} />
       {rows.length === 0 ? (
         <p className="text-sm text-slate-400">
           No elements yet. Add some from the catalog on the left, then click one to edit it.
@@ -141,6 +147,7 @@ export default function App() {
   const { data } = project;
   const wall = data.walls.find((w) => w.id === data.activeWallId) ?? data.walls[0];
   const selected = wall.items.find((i) => i.id === selectedId) ?? null;
+  const violations = useMemo(() => checkProject(data), [data]);
 
   const notify = (kind: 'ok' | 'error', text: string) => {
     setToast({ kind, text });
@@ -228,6 +235,20 @@ export default function App() {
 
   const updateRoom = (patch: Partial<Room>) =>
     setData((d) => syncRoom({ ...d, room: { ...d.room, ...patch } }), { key: `room:${Object.keys(patch).join(',')}` });
+
+  const applyFix = (v: Violation) => {
+    const result = v.fix!.apply(data);
+    if (typeof result === 'string') notify('error', `Can't add the filler: ${result}.`);
+    else setData(() => result);
+  };
+
+  const applyFixes = () => {
+    const { data: next, applied, failed } = applyAllFixes(data);
+    if (applied) setData(() => next);
+    if (failed.length)
+      notify('error', `Added ${applied} filler(s); ${failed.length} couldn't be added: ${failed.join(' ')}`);
+    else notify('ok', applied ? `Added ${applied} filler(s).` : 'No fillers needed.');
+  };
 
   const selectInPlan = (runId: string, itemId: string | null) => {
     if (runId !== data.activeWallId) setData((d) => ({ ...d, activeWallId: runId }), { record: false });
@@ -524,6 +545,7 @@ export default function App() {
                 onActivate={(id) => selectInPlan(id, null)}
                 onMoveItem={(id, pos) => updateItem(id, pos)}
                 onMoveIsland={(id, pos) => updateWall(id, (w) => ({ ...w, ...pos }), `run:${id}:planX,planY`)}
+                violations={violations}
               />
             </div>
           )}
@@ -534,6 +556,7 @@ export default function App() {
                 selectedId={selectedId}
                 onSelect={setSelectedId}
                 onMoveItem={(id, pos) => updateItem(id, pos)}
+                violations={violations}
               />
             </div>
           )}
@@ -558,9 +581,18 @@ export default function App() {
               onMoveToWall={(target) => moveItemToWall(selected.id, target)}
               onDuplicate={() => duplicateItem(selected)}
               onDelete={() => deleteItem(selected.id)}
+              problems={violations.filter((v) => v.items.some((r) => r.itemId === selected.id))}
+              onFix={applyFix}
             />
           ) : (
-            <WallOverview wall={wall} onSelect={setSelectedId} />
+            <WallOverview
+              wall={wall}
+              violations={violations}
+              onSelect={setSelectedId}
+              onSelectProblem={selectInPlan}
+              onFix={applyFix}
+              onFixAll={applyFixes}
+            />
           )}
         </aside>
       </div>
