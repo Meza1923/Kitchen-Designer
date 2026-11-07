@@ -15,7 +15,9 @@ export type ElementCategory =
   | 'window'
   | 'door'
   | 'socket'
-  | 'power_socket';
+  | 'power_socket'
+  /** Derived, not user-editable: where a partition wall meets its host wall (FEATURES.md #10). */
+  | 'partition_joint';
 
 export type TallZoneType = 'door' | 'drawers' | 'oven' | 'microwave' | 'coffee' | 'open';
 
@@ -81,7 +83,7 @@ export type Rotation = 0 | 90 | 180 | 270;
 export interface WallRun {
   id: string;
   name: string; // e.g., "Wall A", "Island"
-  kind: 'wall' | 'island';
+  kind: 'wall' | 'island' | 'partition';
   side?: WallSide; // walls only: the compass side it faces
   segment?: number; // walls only: index of its room-outline segment (missing: derived from `side`)
   removed?: boolean; // walls only: open side of the room (no wall, no items)
@@ -90,11 +92,19 @@ export interface WallRun {
   countertopThicknessCm: number; // Default 3
   items: KitchenItem[];
 
-  // Islands only: footprint top-left in plan (cm), depth and rotation
+  // Islands: footprint top-left in plan (cm), depth and rotation.
+  // Partition faces: derived from the host (lib/partition.ts): planX/planY = the face's start point, rotationDeg = the
+  // direction it runs in (0 = east, 90 = south, 180 = west, 270 = north).
   planX?: number;
   planY?: number;
   depthCm?: number;
   rotationDeg?: Rotation;
+
+  // Partition faces only (FEATURES.md #10): a partition wall is two runs, side A and side B, sharing partitionId.
+  partitionId?: string;
+  face?: 'a' | 'b';
+  hostId?: string; // the wall it stands on, at 90° (T-joint)
+  hostX?: number; // cm along the host wall to the side-A face
 }
 
 export interface PlanPoint {

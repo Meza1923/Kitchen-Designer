@@ -101,7 +101,7 @@ export const BASE_RULES: Rule[] = [
               rule: 'plan_clash',
               severity: 'error',
               badge: 'CLASH',
-              message: `${a ? at(a.run, a.item) : 'An element'} clashes with ${bName} in the plan.`,
+              message: `${a ? at(a.run, a.item) : (data.walls.find((w) => w.id === c.a)?.name ?? 'An element')} clashes with ${bName} in the plan.`,
               items,
               planArea: c.rect,
             }

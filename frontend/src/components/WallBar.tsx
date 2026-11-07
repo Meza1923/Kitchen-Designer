@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pencil, Plus, RotateCcw, RotateCw, X } from 'lucide-react';
 import type { ProjectData, Room, Rotation, WallRun } from '../types';
+import { isJoint } from '../lib/geometry';
 import { closingWalls, directionLabels, roomOutline, segmentIndex, segments, type ShapePreset } from '../lib/outline';
 import { Chips, NumField } from './Inspector';
 
@@ -18,6 +19,10 @@ interface Props {
   onSetShape: (preset: ShapePreset) => void;
   /** Set one wall's length; the room's closing walls follow. */
   onResizeWall: (wallId: string, lengthCm: number) => void;
+  /** Partition walls (#10): add one on the active wall, move / resize one, delete one (both faces). */
+  onAddPartition: () => void;
+  onUpdatePartition: (partitionId: string, change: { hostX?: number; length?: number }) => void;
+  onDeletePartition: (partitionId: string) => void;
 }
 
 const SHAPES: Record<ShapePreset, string> = { rectangle: 'Rectangle', l_shape: 'L-shape', u_shape: 'U-shape' };
@@ -68,6 +73,9 @@ export function WallBar({
   onUpdateRun,
   onSetShape,
   onResizeWall,
+  onAddPartition,
+  onUpdatePartition,
+  onDeletePartition,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const { room } = data;
@@ -81,6 +89,9 @@ export function WallBar({
   const walls = data.walls.filter((w) => !w.removed);
   const openSides = data.walls.filter((w) => w.removed);
   const active = walls.find((w) => w.id === data.activeWallId) ?? walls[0];
+  const own = (w: WallRun) => w.items.filter((i) => !isJoint(i)).length;
+  const partitionsOn = (w: WallRun) => data.walls.filter((p) => p.kind === 'partition' && p.hostId === w.id);
+  const host = active.kind === 'partition' ? data.walls.find((w) => w.id === active.hostId) : undefined;
 
   return (
     <div className="border-b border-slate-300 bg-white">
@@ -92,7 +103,7 @@ export function WallBar({
               key={w.id}
               onClick={() => onActivate(w.id)}
               onDoubleClick={() => setEditingId(w.id)}
-              className={`group flex cursor-pointer items-center gap-1.5 rounded-t border border-b-0 px-3 py-1.5 text-sm ${
+              className={`group flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-t border border-b-0 px-3 py-1.5 text-sm ${
                 isActive
                   ? 'border-slate-300 bg-slate-100 font-semibold text-slate-900'
                   : 'border-transparent text-slate-500 hover:bg-slate-50'
@@ -107,7 +118,7 @@ export function WallBar({
                 }}
               />
               <span className="font-mono text-[10px] font-normal uppercase text-slate-400">
-                {w.kind === 'wall' ? direction(w) : 'island'} · {w.items.length}
+                {w.kind === 'wall' ? direction(w) : w.kind} · {own(w)}
               </span>
               {isActive && editingId !== w.id && (
                 <>
@@ -123,19 +134,34 @@ export function WallBar({
                   </button>
                   {walls.length > 1 && (
                     <button
-                      title={w.kind === 'island' ? 'Delete island' : 'Remove wall (open side)'}
+                      title={
+                        w.kind === 'island'
+                          ? 'Delete island'
+                          : w.kind === 'partition'
+                            ? 'Delete partition (both sides)'
+                            : 'Remove wall (open side)'
+                      }
                       className="rounded p-0.5 text-slate-400 hover:bg-red-100 hover:text-red-600"
                       onClick={(e) => {
                         e.stopPropagation();
-                        const items = w.items.length ? ` and its ${w.items.length} element(s)` : '';
+                        const items = own(w) ? ` and its ${own(w)} element(s)` : '';
                         if (w.kind === 'island') {
                           if (confirm(`Delete "${w.name}"${items}?`)) onDelete(w.id);
-                        } else if (
-                          confirm(
-                            `Remove "${w.name}"${items}? That side of the room becomes open; you can restore the wall later.`,
+                        } else if (w.kind === 'partition') {
+                          const faces = data.walls.filter((p) => p.partitionId === w.partitionId);
+                          const n = faces.reduce((sum, f) => sum + own(f), 0);
+                          const what = n ? ` and the ${n} element(s) on its two sides` : '';
+                          if (confirm(`Delete the partition wall "${w.name}"${what}?`))
+                            onDeletePartition(w.partitionId ?? '');
+                        } else {
+                          const parts = partitionsOn(w).length / 2;
+                          const extra = parts ? ` Its ${parts} partition wall(s) are removed too.` : '';
+                          if (
+                            confirm(
+                              `Remove "${w.name}"${items}? That side of the room becomes open; you can restore the wall later.${extra}`,
+                            )
                           )
-                        ) {
-                          onRemoveWall(w.id);
+                            onRemoveWall(w.id);
                         }
                       }}
                     >
@@ -148,10 +174,22 @@ export function WallBar({
           );
         })}
         <button
-          className="mb-1 ml-1 inline-flex items-center gap-1 rounded px-2 py-1 text-sm text-blue-600 hover:bg-blue-50"
+          className="mb-1 ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-sm text-blue-600 hover:bg-blue-50"
           onClick={onAddIsland}
         >
           <Plus size={14} /> Add Island
+        </button>
+        <button
+          className="mb-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-2 py-1 text-sm text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+          disabled={active.kind !== 'wall'}
+          title={
+            active.kind === 'wall'
+              ? `Add a partition wall standing on ${active.name}`
+              : 'Select a wall tab first: a partition stands on a room wall'
+          }
+          onClick={onAddPartition}
+        >
+          <Plus size={14} /> Add Partition
         </button>
         {openSides.map((w) => (
           <button
@@ -245,6 +283,28 @@ export function WallBar({
             >
               <RotateCw size={14} /> {active.rotationDeg ?? 0}°
             </button>
+          </>
+        )}
+        {active.kind === 'partition' && (
+          <>
+            <Setting label={`Position on ${host?.name ?? 'wall'}`}>
+              <NumField
+                className="w-24"
+                value={active.hostX ?? 0}
+                min={0}
+                max={host?.widthCm ?? 1000}
+                onChange={(hostX) => onUpdatePartition(active.partitionId ?? '', { hostX })}
+              />
+            </Setting>
+            <Setting label="Length">
+              <NumField
+                className="w-24"
+                value={active.widthCm}
+                min={20}
+                max={2000}
+                onChange={(length) => onUpdatePartition(active.partitionId ?? '', { length })}
+              />
+            </Setting>
           </>
         )}
         {active.kind === 'wall' && (

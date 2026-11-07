@@ -25,6 +25,7 @@ import {
   computeCountertops,
   findFreeX,
   fmt,
+  isJoint,
   isWallOnly,
   layerOf,
   normalizeWall,
@@ -33,6 +34,7 @@ import {
 import { api } from './lib/api';
 import { migrateProjectData } from './lib/migrate';
 import { roomChangeWarnings, syncRoom } from './lib/plan';
+import { addPartition, deletePartition, setPartition } from './lib/partition';
 import { presetOutline, type ShapePreset } from './lib/outline';
 import { reshapeRoom, resizeWall } from './lib/roomShape';
 import { exportJson, exportPng, importJson, printPdf, scheduleRows } from './lib/export';
@@ -104,7 +106,7 @@ function WallOverview({
   onFixAll: () => void;
 }) {
   const rows = scheduleRows(wall);
-  const sorted = [...wall.items].sort((a, b) => a.x - b.x || a.y - b.y);
+  const sorted = wall.items.filter((i) => !isJoint(i)).sort((a, b) => a.x - b.x || a.y - b.y);
   return (
     <div className="px-4 py-3">
       <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-700">{wall.name} · Schedule</h3>
@@ -262,11 +264,16 @@ export default function App() {
 
   const setRoomShape = (preset: ShapePreset) => {
     const { data: next, dropped } = reshapeRoom(data, presetOutline(preset, data.room.widthCm, data.room.depthCm));
-    const losses = dropped
-      .filter((w) => w.items.length)
-      .map((w) => `${w.name} is removed together with its ${w.items.length} element(s).`);
+    const losses = dropped.flatMap((w) => {
+      const n = w.items.filter((i) => !isJoint(i)).length;
+      if (w.kind === 'partition') return [`${w.name} (partition) is removed${n ? ` with its ${n} element(s)` : ''}.`];
+      return n ? [`${w.name} is removed together with its ${n} element(s).`] : [];
+    });
     if (applyRoomChange(next, 'room:shape', losses)) setSelectedId(null);
   };
+
+  const updatePartition = (id: string, change: { hostX?: number; length?: number }) =>
+    setData((d) => setPartition(d, id, change), { key: `partition:${id}:${Object.keys(change).join(',')}` });
 
   const resizeRoomWall = (wallId: string, lengthCm: number) => {
     const next = resizeWall(data, wallId, lengthCm);
@@ -312,7 +319,7 @@ export default function App() {
   };
 
   const addItem = (category: ElementCategory, overrides: Partial<KitchenItem> = {}) => {
-    if (isWallOnly(category) && wall.kind !== 'wall') {
+    if (isWallOnly(category) && wall.kind === 'island') {
       notify('error', 'Doors, windows, sockets and open wall shelves go on a wall: select a wall tab first.');
       return;
     }
@@ -542,7 +549,8 @@ export default function App() {
             setData((d) => {
               const walls = d.walls.map((w) => (w.id === id ? { ...w, removed: true, items: [] } : w));
               const fallback = walls.find((w) => !w.removed)!.id;
-              return { ...d, walls, activeWallId: d.activeWallId === id ? fallback : d.activeWallId };
+              // syncRoom drops the partitions that stood on it.
+              return syncRoom({ ...d, walls, activeWallId: d.activeWallId === id ? fallback : d.activeWallId });
             });
             setSelectedId(null);
           }}
@@ -559,6 +567,17 @@ export default function App() {
           }
           onSetShape={setRoomShape}
           onResizeWall={resizeRoomWall}
+          onAddPartition={() => {
+            const next = addPartition(data, data.activeWallId);
+            if (typeof next === 'string') notify('error', next);
+            else setData(() => next);
+            setSelectedId(null);
+          }}
+          onUpdatePartition={updatePartition}
+          onDeletePartition={(id) => {
+            setData((d) => deletePartition(d, id));
+            setSelectedId(null);
+          }}
         />
       )}
 
@@ -604,6 +623,7 @@ export default function App() {
                 onMoveItem={(id, pos) => updateItem(id, pos)}
                 onMoveIsland={(id, pos) => updateWall(id, (w) => ({ ...w, ...pos }), `run:${id}:planX,planY`)}
                 onDragWall={(next) => setData(() => next, { key: 'room:wall-drag' })}
+                onUpdatePartition={updatePartition}
                 violations={violations}
               />
             </div>

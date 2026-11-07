@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import { CATEGORY_LABELS, FRIDGE_TYPE_LABELS, socketName, TALL_ZONE_LABELS } from './defaults';
-import { computeCountertops, computeSocketIssues, fmt, isElectrical } from './geometry';
+import { computeCountertops, computeSocketIssues, fmt, isElectrical, isJoint } from './geometry';
 import { Drawing, drawingSize } from '../components/Drawing';
 import { PlanDrawing, planSize } from '../components/PlanDrawing';
 import { checkProject, runViolations, type Violation } from './rules';
@@ -88,7 +88,8 @@ export interface ScheduleRow {
 }
 
 export function scheduleRows(wall: WallRun): ScheduleRow[] {
-  return [...wall.items]
+  return wall.items
+    .filter((i) => !isJoint(i))
     .sort((a, b) => a.x - b.x || a.y - b.y)
     .map((i, idx) => ({
       no: String(idx + 1),
@@ -131,12 +132,14 @@ function runSummaryRows(data: ProjectData): ScheduleRow[] {
     type:
       w.kind === 'wall'
         ? `Wall · ${wallDirection(data.room, w)}${w.removed ? ' (open side)' : ''}`
-        : `Island · ${w.rotationDeg ?? 0}°`,
+        : w.kind === 'partition'
+          ? `Partition on ${data.walls.find((h) => h.id === w.hostId)?.name ?? '?'} at ${fmt(w.hostX ?? 0)}`
+          : `Island · ${w.rotationDeg ?? 0}°`,
     x: w.kind === 'island' ? fmt(w.planX ?? 0) : '',
     y: w.kind === 'island' ? fmt(w.planY ?? 0) : '',
     size:
       w.kind === 'island' ? `${fmt(w.widthCm)} × ${fmt(w.depthCm ?? 90)}` : `${fmt(w.widthCm)} × ${fmt(w.heightCm)}`,
-    config: `${w.items.length} element(s)${
+    config: `${w.items.filter((i) => !isJoint(i)).length} element(s)${
       computeCountertops(w).length
         ? ` · countertop ${computeCountertops(w)
             .map((c) => fmt(c.width))
@@ -302,7 +305,7 @@ export function printPdf(projectName: string, data: ProjectData) {
     planSection +
     electricalSection(data) +
     data.walls
-      .filter((wall) => wall.items.length > 0)
+      .filter((wall) => wall.items.some((i) => !isJoint(i)))
       .map((wall) => {
         const { markup } = wallSvg(wall, violations);
         const rows = scheduleRows(wall);

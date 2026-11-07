@@ -146,3 +146,31 @@ def test_room_outline_needs_four_corners(client):
         "activeWallId": "",
     }
     assert client.post("/api/projects", json={"name": "bad", "data": data}).status_code == 422
+
+
+def test_partition_round_trip(client):
+    """Feature #10: a partition's two faces and the host's joint item survive save and load."""
+    created = client.post("/api/projects", json={"name": "T"}).json()
+    data = created["data"]
+    host = data["walls"][0]
+    host["items"] = [base_cabinet(id="joint-p1", category="partition_joint", x=195, width=10, height=260, depth=0)]
+    for face in ("a", "b"):
+        data["walls"].append(
+            {
+                "id": f"p1{face}",
+                "name": f"Partition 1 · {face.upper()}",
+                "kind": "partition",
+                "partitionId": "p1",
+                "face": face,
+                "hostId": host["id"],
+                "hostX": 195,
+                "widthCm": 120,
+                "items": [],
+            }
+        )
+    pid = created["id"]
+    assert client.put(f"/api/projects/{pid}", json={"data": data}).status_code == 200
+    loaded = client.get(f"/api/projects/{pid}").json()["data"]
+    faces = [w for w in loaded["walls"] if w["kind"] == "partition"]
+    assert [(w["face"], w["hostId"], w["hostX"]) for w in faces] == [("a", host["id"], 195), ("b", host["id"], 195)]
+    assert loaded["walls"][0]["items"][0]["category"] == "partition_joint"

@@ -49,7 +49,8 @@
               "window",
               "door",
               "socket",
-              "power_socket"
+              "power_socket",
+              "partition_joint"
             ],
             "title": "Category",
             "type": "string"
@@ -599,10 +600,47 @@
             ],
             "title": "Depthcm"
           },
+          "face": {
+            "anyOf": [
+              {
+                "enum": [
+                  "a",
+                  "b"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face"
+          },
           "heightCm": {
             "default": 260,
             "title": "Heightcm",
             "type": "number"
+          },
+          "hostId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hostid"
+          },
+          "hostX": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hostx"
           },
           "id": {
             "title": "Id",
@@ -619,7 +657,8 @@
             "default": "wall",
             "enum": [
               "wall",
-              "island"
+              "island",
+              "partition"
             ],
             "title": "Kind",
             "type": "string"
@@ -627,6 +666,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "partitionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partitionid"
           },
           "planX": {
             "anyOf": [
@@ -738,10 +788,47 @@
             ],
             "title": "Depthcm"
           },
+          "face": {
+            "anyOf": [
+              {
+                "enum": [
+                  "a",
+                  "b"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face"
+          },
           "heightCm": {
             "default": 260,
             "title": "Heightcm",
             "type": "number"
+          },
+          "hostId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hostid"
+          },
+          "hostX": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hostx"
           },
           "id": {
             "title": "Id",
@@ -758,7 +845,8 @@
             "default": "wall",
             "enum": [
               "wall",
-              "island"
+              "island",
+              "partition"
             ],
             "title": "Kind",
             "type": "string"
@@ -766,6 +854,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "partitionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partitionid"
           },
           "planX": {
             "anyOf": [

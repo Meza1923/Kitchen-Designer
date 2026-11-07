@@ -69,8 +69,11 @@ export function reshapeRoom(data: ProjectData, outline: Pt[]): { data: ProjectDa
         };
   });
   const kept = new Set(walls.map((w) => w.id));
-  const dropped = data.walls.filter((w) => w.kind === 'wall' && !kept.has(w.id));
-  const islands = data.walls.filter((w) => w.kind === 'island');
+  const droppedWalls = data.walls.filter((w) => w.kind === 'wall' && !kept.has(w.id));
+  // Partitions standing on a dropped wall go with it.
+  const gone = new Set(droppedWalls.map((w) => w.id));
+  const dropped = [...droppedWalls, ...data.walls.filter((w) => w.kind === 'partition' && gone.has(w.hostId ?? ''))];
+  const islands = data.walls.filter((w) => w.kind !== 'wall' && !dropped.includes(w));
   const box = bounds(outline);
   const room = { ...data.room, outline, widthCm: box.w, depthCm: box.h };
   const activeWallId = [...walls, ...islands].some((w) => w.id === data.activeWallId) ? data.activeWallId : walls[0].id;
@@ -121,10 +124,16 @@ function moveSegment(data: ProjectData, index: number, delta: number): { data: P
   const { shift } = result;
   const walls = data.walls.map((w) => {
     if (w.kind === 'island') return { ...w, planX: (w.planX ?? 0) + shift.x, planY: (w.planY ?? 0) + shift.y };
-    if (segmentIndex(w) === next.index && slide !== 0)
+    if (w.kind === 'wall' && segmentIndex(w) === next.index && slide !== 0)
       return { ...w, items: w.items.map((i) => ({ ...i, x: i.x - slide })) };
     return w;
   });
+  // Partitions standing on the next wall keep their physical place too.
+  const nextWall = data.walls.find((w) => w.kind === 'wall' && segmentIndex(w) === next.index);
+  if (nextWall && slide !== 0)
+    for (let k = 0; k < walls.length; k++)
+      if (walls[k].kind === 'partition' && walls[k].hostId === nextWall.id)
+        walls[k] = { ...walls[k], hostX: (walls[k].hostX ?? 0) - slide };
   const box = bounds(result.outline);
   const room = { ...data.room, outline: result.outline, widthCm: box.w, depthCm: box.h };
   return { data: syncRoom({ ...data, room, walls }), shift };

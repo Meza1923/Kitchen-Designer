@@ -1,7 +1,15 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
-import { boxHeight, computeCountertops, fridgeDoors, isElectrical, isOpening, isWallMounted } from './geometry';
+import {
+  boxHeight,
+  computeCountertops,
+  fridgeDoors,
+  isElectrical,
+  isJoint,
+  isOpening,
+  isWallMounted,
+} from './geometry';
 import {
   countertopRects,
   islandRect,
@@ -669,13 +677,17 @@ function addWall(b: Builder, root: THREE.Group, data: ProjectData, run: WallRun)
 
   const group = new THREE.Group();
   const inner = toPlan(f, f.length / 2, 0);
-  group.userData.wall = {
-    point: new THREE.Vector3(inner.x, 0, inner.y),
-    normal: new THREE.Vector3(f.n.x, 0, f.n.y),
-  } satisfies WallMeta;
+  // Room walls hide when their outside faces the camera (dollhouse view); partitions stay.
+  if (run.kind === 'wall')
+    group.userData.wall = {
+      point: new THREE.Vector3(inner.x, 0, inner.y),
+      normal: new THREE.Vector3(f.n.x, 0, f.n.y),
+    } satisfies WallMeta;
+  // A partition's body is built once, from side A (side B only adds what is on its face).
+  const body = !(run.kind === 'partition' && run.face === 'b');
 
   const piece = (x0: number, x1: number, y0: number, y1: number) =>
-    b.box(group, localRect(f, x0, x1, -T, 0), y0, y1, C.wall);
+    body && b.box(group, localRect(f, x0, x1, -T, 0), y0, y1, C.wall);
   const openings = run.items.filter((i) => isOpening(i.category)).sort((p, q) => p.x - q.x);
   let cursor = start;
   for (const op of openings) {
@@ -762,7 +774,7 @@ export function buildKitchen(
 
   for (const run of data.walls) {
     if (run.kind === 'wall' && run.removed) continue;
-    if (run.kind === 'wall') addWall(b, root, data, run);
+    if (run.kind === 'wall' || run.kind === 'partition') addWall(b, root, data, run);
     if (run.kind === 'island' && !run.items.length) {
       const r = islandRect(run);
       b.box(root, r, 0, 0.4, C.open, { opacity: 0.6 });
@@ -770,7 +782,7 @@ export function buildKitchen(
     const f = wallFrame(room, run);
     const group = new THREE.Group();
     for (const item of run.items) {
-      if (isWallMounted(item.category)) continue;
+      if (isWallMounted(item.category) || isJoint(item)) continue;
       addItem(b, group, f, run, item, run.countertopThicknessCm);
     }
     const slabs = computeCountertops(run); // same order as countertopRects

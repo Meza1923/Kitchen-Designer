@@ -22,6 +22,7 @@ ElementCategory = Literal[
     "door",
     "socket",
     "power_socket",
+    "partition_joint",  # derived: where a partition wall meets its host wall (#10); not user-editable
 ]
 TallZoneType = Literal["door", "drawers", "oven", "microwave", "coffee", "open"]
 FridgeType = Literal["side_by_side", "french_door", "top_bottom"]
@@ -64,7 +65,7 @@ class KitchenItem(BaseModel):
 class WallRun(BaseModel):
     id: str
     name: str
-    kind: Literal["wall", "island"] = "wall"
+    kind: Literal["wall", "island", "partition"] = "wall"
     side: Optional[Literal["north", "east", "south", "west"]] = None
     segment: Optional[int] = Field(default=None, ge=0)  # walls only: index of its room-outline segment
     removed: Optional[bool] = None  # walls only: open side of the room
@@ -77,6 +78,11 @@ class WallRun(BaseModel):
     planY: Optional[float] = None
     depthCm: Optional[float] = None
     rotationDeg: Optional[Literal[0, 90, 180, 270]] = None
+    # Partition faces only (#10): both faces of one partition share partitionId and the host geometry.
+    partitionId: Optional[str] = None
+    face: Optional[Literal["a", "b"]] = None
+    hostId: Optional[str] = None  # the wall it stands on (T-joint)
+    hostX: Optional[float] = None  # cm along the host wall to the partition's side-A face
 
 
 class PlanPoint(BaseModel):

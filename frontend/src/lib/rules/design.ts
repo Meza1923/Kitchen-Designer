@@ -9,8 +9,10 @@ import {
   islandRect,
   itemPlanRect,
   localRect,
+  partitionRects,
   rectIntersection,
   rectsOverlap,
+  segmentHitsRect,
   wallFrame,
   type Frame,
   type Pt,
@@ -20,8 +22,9 @@ import {
   at,
   cornerDepth,
   corners,
+  cornerDist,
   cornerUnits,
-  distToEnd,
+  neighbourDist,
   floorUnits,
   graded,
   hasOvenZone,
@@ -59,8 +62,8 @@ const cornerFiller = (c: Corner, obstacle: number, width: number, serves: Kitche
   label: `Add ${width} cm filler`,
   apply: (data: ProjectData) =>
     c.end === 'start'
-      ? insertFiller(data, c.run.id, obstacle, width, 'end', serves)
-      : insertFiller(data, c.run.id, c.run.widthCm - obstacle, width, 'start', serves),
+      ? insertFiller(data, c.run.id, c.pos + obstacle, width, 'end', serves)
+      : insertFiller(data, c.run.id, c.pos - obstacle, width, 'start', serves),
 });
 const isTall = (i: KitchenItem) => i.category === 'tall_cabinet' || i.category === 'fridge';
 const ofCategory = (run: WallRun, ...cats: KitchenItem['category'][]) =>
@@ -93,7 +96,7 @@ const R1: Rule = {
       return floorUnits(c.run)
         .filter(isPullOut)
         .flatMap((i) => {
-          const clearance = distToEnd(c.run, i, c.end) - depth;
+          const clearance = cornerDist(c, i) - depth;
           if (clearance < -0.5 || clearance >= CORNER_FILLER) return [];
           return [
             v(
@@ -120,7 +123,7 @@ const R2: Rule = {
       return floorUnits(c.run)
         .filter((i) => hingeEdges(i).includes(c.end))
         .flatMap((i) => {
-          const gap = distToEnd(c.run, i, c.end) - obstacle;
+          const gap = cornerDist(c, i) - obstacle;
           const severity = gap >= -0.5 ? graded(gap, HINGE_GAP[0], HINGE_GAP[1], 'error') : null;
           if (!severity) return [];
           return [
@@ -161,6 +164,7 @@ const R4: Rule = {
       return floorUnits(run).map((item) => ({ run, f, item, rect: itemPlanRect(f, item) }));
     });
     const outline = roomOutline(data.room);
+    const partitions = partitionRects(data);
     const out: Violation[] = [];
     const narrowest = new Map<string, { gap: number; p: Placed; q: Placed; area: Rect }>();
     for (const p of placed) {
@@ -182,8 +186,8 @@ const R4: Rule = {
         if (gap <= 0) continue;
         const lo = Math.min(pf, qf);
         const area = n.x !== 0 ? { x: lo, y: o0, w: gap, h: o1 - o0 } : { x: o0, y: lo, w: o1 - o0, h: gap };
-        // Runs facing each other across a wall (the notch of a U, the tip of an L) share no aisle.
-        if (!rectInOutline(outline, area)) continue;
+        // Runs facing each other across a wall (the notch of a U, the tip of an L, a partition) share no aisle.
+        if (!rectInOutline(outline, area) || partitions.some(({ rect }) => rectsOverlap(area, rect))) continue;
         const reach = openReach(p.item) + openReach(q.item);
         if (reach > gap) {
           out.push(
@@ -284,20 +288,20 @@ const R6: Rule = {
   id: 'R6',
   title: 'Cooktop lateral clearance',
   check: ({ data }) => {
-    const cornerAt = new Map(corners(data).map((c) => [`${c.run.id}:${c.end}`, c]));
+    const all = corners(data);
     return liveRuns(data).flatMap((run) =>
       ofCategory(run, 'stove').flatMap((stove) => {
         const sides: { gap: number; what: string; who?: KitchenItem }[] = [];
         for (const t of run.items.filter(isTall)) sides.push({ gap: edgeGap(stove, t), what: itemName(t), who: t });
-        for (const end of ['start', 'end'] as End[]) {
-          const c = cornerAt.get(`${run.id}:${end}`);
-          if (!c) continue;
+        for (const c of all.filter((k) => k.run.id === run.id)) {
           const units = cornerUnits(c);
+          const d = cornerDist(c, stove);
+          if (!Number.isFinite(d)) continue;
           // A bare wall, or tall units standing in the corner; base units there leave the space above free.
-          if (!units.length) sides.push({ gap: distToEnd(run, stove, end), what: `the wall (${c.neighbour.name})` });
+          if (!units.length) sides.push({ gap: d, what: `the wall (${c.neighbour.name})` });
           else if (units.some(isTall))
             sides.push({
-              gap: distToEnd(run, stove, end) - cornerDepth(c),
+              gap: d - cornerDepth(c),
               what: `the tall units on ${c.neighbour.name}`,
             });
         }
@@ -441,21 +445,36 @@ const R14: Rule = {
   id: 'R14',
   title: 'Zero-tolerance wall run',
   check: ({ data }) => {
-    const cornered = new Set(corners(data).map((c) => `${c.run.id}:${c.end}`));
+    // Every stretch of a run between two inside corners: a whole wall, or one side of a partition's T-joint.
+    const all = corners(data);
     return liveRuns(data)
-      .filter((run) => cornered.has(`${run.id}:start`) && cornered.has(`${run.id}:end`))
       .flatMap((run) => {
-        const units = floorUnits(run).sort((a, b) => a.x - b.x);
-        if (!units.length || units[0].x > 0.5) return [];
+        const mine = all.filter((c) => c.run.id === run.id);
+        const ends = mine.filter((c) => c.end === 'end').map((c) => c.pos);
+        return mine
+          .filter((c) => c.end === 'start')
+          .flatMap((c) => {
+            const p0 = c.pos;
+            const p1 = Math.min(...ends.filter((e) => e > p0 + 0.5));
+            if (!Number.isFinite(p1)) return [];
+            const whole = p0 < 0.5 && p1 > run.widthCm - 0.5;
+            return [{ run, p0, p1, whole }];
+          });
+      })
+      .flatMap(({ run, p0, p1, whole }) => {
+        const units = floorUnits(run)
+          .filter((u) => u.x >= p0 - 0.5 && right(u) <= p1 + 0.5)
+          .sort((a, b) => a.x - b.x);
+        if (!units.length || units[0].x > p0 + 0.5) return [];
         // Overlapping units aren't "wall to wall": the overlap is the real problem (flagged on its own), and a
         // scribe filler would only narrow a cabinet in an already broken run (issue #17).
         if (units.some((u, k) => k > 0 && u.x < right(units[k - 1]) - 0.5)) return [];
-        let reach = 0;
+        let reach = p0;
         for (const u of units) {
           if (u.x > reach + 0.5) return [];
           reach = Math.max(reach, right(u));
         }
-        if (reach < run.widthCm - 0.5) return [];
+        if (reach < p1 - 0.5) return [];
         const fillers = units.filter((u) => u.category === 'filler').reduce((s, u) => s + u.width, 0);
         const severity = graded(fillers, SCRIBE[0], SCRIBE[1], 'error');
         if (!severity) return [];
@@ -464,12 +483,12 @@ const R14: Rule = {
             'R14',
             severity,
             'NO SCRIBE ALLOWANCE',
-            `The units on ${run.name} run wall to wall with ${fmt(fillers)} cm of filler; leave ${SCRIBE[0]}–${SCRIBE[1]} cm in total to fit against crooked walls.`,
+            `The units on ${run.name}${whole ? '' : ` (${fmt(p0)}–${fmt(p1)} cm)`} run wall to wall with ${fmt(fillers)} cm of filler; leave ${SCRIBE[0]}–${SCRIBE[1]} cm in total to fit against crooked walls.`,
             {
               items: units.map((u) => ref(run, u)),
               fix: {
                 label: `Add ${fmt(SCRIBE[1] - fillers)} cm scribe filler`,
-                apply: (data) => addScribeFiller(data, run.id, SCRIBE[1] - fillers),
+                apply: (data) => addScribeFiller(data, run.id, SCRIBE[1] - fillers, [p0, p1]),
               },
             },
           ),
@@ -554,16 +573,21 @@ const R17: Rule = {
       [c, f, 'the cooktop and the fridge'],
       [f, s, 'the fridge and the sink'],
     ] as const;
+    const partitions = partitionRects(data);
     for (const [a, b, what] of legs) {
-      if (lineInOutline(outline, a.p, b.p)) continue;
+      // A partition wall across the leg counts too (review finding R13).
+      const part = partitions.find(({ rect }) => segmentHitsRect(a.p, b.p, rect));
+      if (lineInOutline(outline, a.p, b.p) && !part) continue;
+      const wall = part ? (part.run.name.match(/^Partition \d+/)?.[0] ?? part.run.name) : 'A wall of the room';
       out.push(
         v(
           'R17',
           'warning',
           'WALL IN THE WAY',
-          `A wall of the room stands between ${what}: the work triangle has to go around it.`,
+          `${wall} stands between ${what}: the work triangle has to go around it.`,
           {
             items: [ref(a.run, a.item), ref(b.run, b.item)],
+            ...(part && { planArea: part.rect }),
           },
         ),
       );
@@ -619,11 +643,11 @@ const R18: Rule = {
   check: ({ data }) =>
     corners(data).flatMap((c) =>
       floorUnits(c.run)
-        .filter((x) => distToEnd(c.run, x, c.end) < 1 && x.category !== 'corner_blocker' && x.category !== 'filler')
+        .filter((x) => cornerDist(c, x) < 1 && x.category !== 'corner_blocker' && x.category !== 'filler')
         .flatMap((x) => {
           // The neighbour's first unit starts right at this unit's front: its front is (partly) blind.
           const blocker = floorUnits(c.neighbour).find((y) => {
-            const d = distToEnd(c.neighbour, y, c.neighbourEnd);
+            const d = neighbourDist(c, y);
             return d >= x.depth - 1 && d < x.depth + 10;
           });
           if (!blocker) return [];

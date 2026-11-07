@@ -34,6 +34,7 @@ export const CATEGORY_LABELS: Record<ElementCategory, string> = {
   door: 'Door',
   socket: 'Socket',
   power_socket: 'Power Socket 16A',
+  partition_joint: 'Partition wall',
 };
 
 export const FRIDGE_TYPE_LABELS: Record<FridgeType, string> = {
@@ -96,6 +97,7 @@ const SPECS: Record<ElementCategory, Spec> = {
   // Wall sockets: y is the plate's bottom edge; the default centre height is 110 cm.
   socket: { width: 8, height: 8, depth: 0, y: 106, toeKick: 0 },
   power_socket: { width: 9, height: 9, depth: 0, y: 105.5, toeKick: 0 },
+  partition_joint: { width: 10, height: 260, depth: 0, y: 0, toeKick: 0 },
 };
 
 export const SOCKET_HEIGHT_PRESETS = [30, 60, 110, 120];

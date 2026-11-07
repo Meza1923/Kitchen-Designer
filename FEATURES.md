@@ -17,7 +17,7 @@ Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 g
 | 7 | Shelves: open wall shelf, shelves inside cabinets, open cabinets | Small–Medium | Done (to test in the app) |
 | 8 | Hebrew and English interface | Large | Planned |
 | 9 | Islands: two-sided, seating overhang, front marker | Medium–Large | Planned |
-| 10 | Connect walls: corner dragging and partition walls (T-joints) | Medium–Large | Phase A Done; phase B Planned |
+| 10 | Connect walls: corner dragging and partition walls (T-joints) | Medium–Large | Done |
 
 ## Details
 
@@ -300,6 +300,41 @@ Each phase gets its own handoff for review.
 - **Its far end is open.**
 - **Views:** plan, 3D, rules, export and save/load all handle it.
 
+**Phase B handoff (2026-11-07, branch `feat/10-partition-walls`):**
+- **What changed:**
+  - **Data model:** a partition is two runs (`kind: 'partition'`, side A and side B), sharing `partitionId`, `hostId` and `hostX`. Its length is `widthCm`.
+  - **Joint element:** where it meets the host wall, `syncRoom` keeps a derived, locked, full-height `partition_joint` element on the host. Overlap, gap, snap, free-slot placement, wall fitting and the filler fixes all treat that stretch as blocked without special cases. The joint is never selectable, listed or exported.
+  - **Geometry** (`lib/plan.ts`: `partitionFrame`, `partitionRect`, `syncPartitions`; `lib/partition.ts`: add, set, delete):
+    - Side A starts at the host wall and runs into the room. Side B runs back and ends at the host wall.
+    - A partition goes away with its host (removed wall, or a shape change that drops the wall; both confirm first).
+    - A partition keeps its physical place when the wall before its host is dragged.
+  - **Corner rules** (`rules/core.ts`): a corner now carries its position along the run (`pos` / `neighbourPos`), so R1, R2, R6 and R18 work at the T-joint on both the partition side and the host side.
+    - R14 checks every stretch between two inside corners, for example corner to joint.
+    - The filler fixes (`pushClear`, `addScribeFiller`) only push units within the stretch between joints.
+  - **Plan:**
+    - The partition is drawn as a hatched wall. Each half selects the face on that side; dragging it slides the partition along the host (5 cm steps, Shift for 1 cm). The tip handle changes its length.
+    - Flagged: **OUTSIDE ROOM**, and **CLASH** with units on other runs or with islands.
+  - **Bar:** "+ Add Partition" (enabled when a wall tab is active; placed centred on the widest free stretch). For an active partition: **Position on <host>** and **Length** fields, plus a delete button that removes both sides. Tabs no longer wrap.
+  - **Elevation:** the host shows the partition as a hatched full-height section labelled PARTITION.
+  - **3D:** the body is a full-height wall; side B adds only its sockets. Partitions never hide in the dollhouse view.
+  - **Export:** the run summary lists "Partition on <wall> at X". There is a page per face that has elements.
+  - Sockets and shelves can go on partitions (refused only on islands).
+- **How to check:**
+  - On Wall A, click "+ Add Partition".
+  - Drag it along the wall and pull its tip.
+  - Add cabinets on side A, side B and Wall A next to the joint.
+  - Look at Wall A's elevation, the rules panel (CORNER PULL-OUT, HINGE AT WALL, NO SCRIBE ALLOWANCE at the joint) and 3D.
+- **Checked:**
+  - 9 new frontend tests (`partition.test.ts`: geometry, blocking, clamping, wall drag, removal, outside room, R1 on both sides plus its fix, R14 on a host stretch).
+  - 1 backend round-trip test.
+  - All 164 frontend tests pass.
+  - In the isolated app (Playwright MCP, ports 5199/8765): add, slide, resize, a cabinet on side A, the Wall A elevation with the joint and auto-placement skipping it, and 3D. No page errors.
+- **Known limits:**
+  - Thickness is fixed at 10 cm and height at the ceiling.
+  - Only straight partitions at 90° from a room wall, not from another partition.
+  - Windows/doors on a partition don't cut a hole in its 3D body.
+  - Cabinet bands on the host aren't drawn around the joint in the plan (the joint itself isn't drawn there; the partition body is).
+
 **Done when:**
 - A corner can be dragged in the plan, and the room stays closed with 90° corners.
 - A partition can be added on a wall, moved along it, resized, and given cabinets on both faces.
@@ -345,3 +380,6 @@ Each phase gets its own handoff for review.
 - 2026-11-07: #10 phase A (corner dragging) started on `feat/10-connect-walls`.
 - 2026-11-07: #10 phase A (corner dragging) built and checked; In review on `feat/10-connect-walls`.
 - 2026-11-07: #10 phase A merged into `main` (owner approved). Phase B (partition walls) is next.
+- 2026-11-07: #10 phase B (partition walls) built and checked; In review on `feat/10-partition-walls`.
+- 2026-11-07: #10 phase B: review findings R12–R14 fixed (filler fix stays within a stretch; aisle, work triangle and door swing see partitions; room changes respect and warn about partitions). 170 frontend tests pass.
+- 2026-11-07: #10 phase B merged into `main` (owner approved); #10 Done.

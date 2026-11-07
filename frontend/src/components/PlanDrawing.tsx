@@ -1,12 +1,13 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import { directionLabels, roomOutline, segmentIndex, segments, type Pt, type Segment } from '../lib/outline';
-import { computeGaps, fmt, isElectrical, isOpening, layerOf } from '../lib/geometry';
+import { computeGaps, fmt, isElectrical, isJoint, isOpening, layerOf } from '../lib/geometry';
 import {
   countertopRects,
   islandRect,
   itemPlanRect,
   localRect,
+  partitionRect,
   toPlan,
   wallFrame,
   WALL_THICKNESS_CM,
@@ -46,6 +47,7 @@ const SHORT: Record<KitchenItem['category'], string> = {
   door: 'DOOR',
   socket: 'S',
   power_socket: '16A',
+  partition_joint: '',
 };
 
 const LINE = { stroke: THIN, strokeWidth: 1, fill: 'none' };
@@ -57,6 +59,8 @@ export interface PlanDrawingProps {
   interactive?: boolean;
   onItemPointerDown?: (e: ReactPointerEvent, run: WallRun, item: KitchenItem) => void;
   onRunPointerDown?: (e: ReactPointerEvent, run: WallRun) => void;
+  /** The far end of a partition wall grabbed, to change its length. */
+  onPartitionTipPointerDown?: (e: ReactPointerEvent, faceA: WallRun) => void;
   /** A room corner grabbed (index of the outline point), to drag both walls meeting there. */
   onCornerPointerDown?: (e: ReactPointerEvent, corner: number) => void;
   /** Rule violations for the project (see lib/rules.ts). */
@@ -71,6 +75,7 @@ export function PlanDrawing({
   onItemPointerDown,
   onRunPointerDown,
   onCornerPointerDown,
+  onPartitionTipPointerDown,
   violations,
 }: PlanDrawingProps) {
   const { room } = data;
@@ -322,10 +327,83 @@ export function PlanDrawing({
             );
           })}
 
+        {/* Partition walls (#10): a hatched body; each half selects the face on that side, the tip sets the length */}
+        {runs
+          .filter(({ run }) => run.kind === 'partition' && run.face !== 'b')
+          .map(({ run: a, f: fa }) => {
+            const b = runs.find(
+              ({ run }) => run.kind === 'partition' && run.partitionId === a.partitionId && run !== a,
+            );
+            const body = partitionRect(room, a);
+            const L = a.widthCm;
+            const activeFace = [a, b?.run].find((r) => r?.id === active);
+            const af = activeFace === a ? fa : b?.f;
+            const tip = toPlan(fa, L, -T / 2);
+            const vertical = Math.abs(fa.u.y) > 0.5;
+            const lp = toPlan(fa, L + 34, -T / 2);
+            const half = (run: WallRun, f: Frame) => (
+              <rect
+                key={run.id}
+                data-run-id={run.id}
+                {...px(localRect(f, 0, L, -T / 2, 0))}
+                fill="transparent"
+                style={interactive ? { cursor: vertical ? 'ew-resize' : 'ns-resize' } : undefined}
+                onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined}
+              />
+            );
+            return (
+              <g key={`partition-${a.partitionId}`} data-partition={a.partitionId}>
+                <rect {...px(body)} fill="url(#planWallHatch)" stroke={INK} strokeWidth={1.75} />
+                {af && activeFace && (
+                  <line
+                    x1={toPlan(af, 0, 0).x * S}
+                    y1={toPlan(af, 0, 0).y * S}
+                    x2={toPlan(af, L, 0).x * S}
+                    y2={toPlan(af, L, 0).y * S}
+                    stroke={SELECT}
+                    strokeWidth={4}
+                    strokeOpacity={0.6}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                )}
+                {half(a, fa)}
+                {b && half(b.run, b.f)}
+                <Label
+                  x={lp.x * S}
+                  y={lp.y * S}
+                  text={`${(a.name.match(/^Partition \d+/)?.[0] ?? a.name).toUpperCase()} · ${fmt(L)}`}
+                  size={8}
+                  weight={700}
+                  fill={activeFace ? SELECT : THIN}
+                  rotate={vertical ? -90 : undefined}
+                />
+                {interactive && onPartitionTipPointerDown && (
+                  <g
+                    data-partition-tip={a.partitionId}
+                    style={{ cursor: vertical ? 'ns-resize' : 'ew-resize' }}
+                    onPointerDown={(e) => onPartitionTipPointerDown(e, a)}
+                  >
+                    <title>Drag to change the partition's length</title>
+                    <rect x={tip.x * S - 7} y={tip.y * S - 7} width={14} height={14} fill="transparent" />
+                    <rect
+                      x={tip.x * S - 4}
+                      y={tip.y * S - 4}
+                      width={8}
+                      height={8}
+                      fill="#fff"
+                      stroke={SELECT}
+                      strokeWidth={1.5}
+                    />
+                  </g>
+                )}
+              </g>
+            );
+          })}
+
         {/* Floor-standing units */}
         {runs.flatMap(({ run, f }) =>
           run.items
-            .filter((i) => layerOf(i.category) === 'floor')
+            .filter((i) => layerOf(i.category) === 'floor' && !isJoint(i))
             .map((item) => {
               const r = itemPlanRect(f, item);
               return (
@@ -568,7 +646,7 @@ export function PlanDrawing({
         )}
         {runs.flatMap(({ f, run }) =>
           run.items
-            .filter((i) => flagged.has(i.id))
+            .filter((i) => flagged.has(i.id) && !isJoint(i))
             .map((item) => {
               const r = footprint(f, item);
               return (

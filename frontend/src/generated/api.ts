@@ -75,7 +75,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "base_cabinet" | "upper_cabinet" | "tall_cabinet" | "corner_blocker" | "filler" | "shelf" | "fridge" | "washing_machine" | "under_counter_oven" | "sink" | "stove" | "water_bar" | "coffee_machine" | "window" | "door" | "socket" | "power_socket";
+            category: "base_cabinet" | "upper_cabinet" | "tall_cabinet" | "corner_blocker" | "filler" | "shelf" | "fridge" | "washing_machine" | "under_counter_oven" | "sink" | "stove" | "water_bar" | "coffee_machine" | "window" | "door" | "socket" | "power_socket" | "partition_joint";
             /** Depth */
             depth?: number | null;
             /**
@@ -264,11 +264,17 @@ export interface components {
             countertopThicknessCm: number;
             /** Depthcm */
             depthCm?: number | null;
+            /** Face */
+            face?: ("a" | "b") | null;
             /**
              * Heightcm
              * @default 260
              */
             heightCm: number;
+            /** Hostid */
+            hostId?: string | null;
+            /** Hostx */
+            hostX?: number | null;
             /** Id */
             id: string;
             /** Items */
@@ -278,9 +284,11 @@ export interface components {
              * @default wall
              * @enum {string}
              */
-            kind: "wall" | "island";
+            kind: "wall" | "island" | "partition";
             /** Name */
             name: string;
+            /** Partitionid */
+            partitionId?: string | null;
             /** Planx */
             planX?: number | null;
             /** Plany */
@@ -308,11 +316,17 @@ export interface components {
             countertopThicknessCm: number;
             /** Depthcm */
             depthCm?: number | null;
+            /** Face */
+            face?: ("a" | "b") | null;
             /**
              * Heightcm
              * @default 260
              */
             heightCm: number;
+            /** Hostid */
+            hostId?: string | null;
+            /** Hostx */
+            hostX?: number | null;
             /** Id */
             id: string;
             /** Items */
@@ -322,9 +336,11 @@ export interface components {
              * @default wall
              * @enum {string}
              */
-            kind: "wall" | "island";
+            kind: "wall" | "island" | "partition";
             /** Name */
             name: string;
+            /** Partitionid */
+            partitionId?: string | null;
             /** Planx */
             planX?: number | null;
             /** Plany */

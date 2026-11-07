@@ -16,6 +16,7 @@ const FLOOR: ElementCategory[] = [
   'fridge',
   'washing_machine',
   'under_counter_oven',
+  'partition_joint',
 ];
 /**
  * Upper layer: wall cabinets and wall openings. A door is an opening from the floor up, so through
@@ -61,6 +62,12 @@ export const isOpening = (c: ElementCategory) => c === 'window' || c === 'door';
 export const isWallMounted = (c: ElementCategory) => isOpening(c) || isElectrical(c);
 /** Elements that need a wall behind them: wall-mounted items and open wall shelves (never on islands). */
 export const isWallOnly = (c: ElementCategory) => isWallMounted(c) || c === 'shelf';
+
+/**
+ * Where a partition wall meets its host wall (FEATURES.md #10): a derived, full-height floor item on the host, so
+ * cabinets can't stand there and snap / gap / placement treat it like any neighbour. Never selected or listed.
+ */
+export const isJoint = (i: KitchenItem) => i.category === 'partition_joint';
 
 export const round1 = (v: number) => Math.round(v * 10) / 10;
 export const fmt = (v: number) => (Number.isInteger(round1(v)) ? String(round1(v)) : round1(v).toFixed(1));

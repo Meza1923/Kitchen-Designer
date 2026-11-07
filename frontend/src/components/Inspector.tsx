@@ -384,10 +384,11 @@ export function Inspector({
         <Field label="Wall / run">
           <select className="field" value={wall.id} onChange={(e) => onMoveToWall(e.target.value)}>
             {walls
-              .filter((w) => !w.removed && (!isWallOnly(item.category) || w.kind === 'wall'))
+              .filter((w) => !w.removed && (!isWallOnly(item.category) || w.kind !== 'island'))
               .map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.name} · {w.kind === 'wall' ? wallDirection(room, w) : 'Island'}
+                  {w.name} ·{' '}
+                  {w.kind === 'wall' ? wallDirection(room, w) : w.kind === 'partition' ? 'Partition' : 'Island'}
                 </option>
               ))}
           </select>

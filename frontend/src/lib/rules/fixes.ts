@@ -4,7 +4,7 @@
  */
 import type { KitchenItem, ProjectData, WallRun } from '../../types';
 import { createItem } from '../defaults';
-import { countersOnUnits, fmt, layerOf, normalizeWall } from '../geometry';
+import { countersOnUnits, fmt, isJoint, layerOf, normalizeWall } from '../geometry';
 import type { End } from './core';
 
 const right = (i: KitchenItem) => i.x + i.width;
@@ -17,6 +17,14 @@ const replaceRun = (data: ProjectData, run: WallRun): ProjectData => ({
   walls: data.walls.map((w) => (w.id === run.id ? normalizeWall(run) : w)),
 });
 
+/** The stretch of a run around [x0, x1] between partition joints (or the run's ends). */
+function stretchAround(run: WallRun, x0: number, x1: number): [number, number] {
+  const joints = run.items.filter(isJoint);
+  const lo = Math.max(0, ...joints.filter((j) => right(j) <= x0 + 0.5).map(right));
+  const hi = Math.min(run.widthCm, ...joints.filter((j) => j.x >= x1 - 0.5).map((j) => j.x));
+  return [lo, hi];
+}
+
 /**
  * Move floor units (and what stands on them) so nothing overlaps [x0, x1]; pushes towards `away`.
  * Returns the shortfall (cm) instead when the units would be pushed past the end of the run.
@@ -24,7 +32,9 @@ const replaceRun = (data: ProjectData, run: WallRun): ProjectData => ({
 function pushClear(run: WallRun, x0: number, x1: number, away: End): WallRun | number {
   const ride = riders(run);
   const shift = new Map<string, number>();
-  const units = run.items.filter(isFloor);
+  // Partition joints (#10) split the run: units are only pushed within the stretch between them.
+  const [lo, hi] = stretchAround(run, x0, x1);
+  const units = run.items.filter((u) => isFloor(u) && u.x >= lo - 0.5 && right(u) <= hi + 0.5);
   if (away === 'end') {
     let cursor = x1;
     for (const u of units.filter((u) => right(u) > x0 + 0.5).sort((a, b) => a.x - b.x)) {
@@ -32,7 +42,7 @@ function pushClear(run: WallRun, x0: number, x1: number, away: End): WallRun | n
       if (d > 0) shift.set(u.id, d);
       cursor = Math.max(cursor, right(u) + d);
     }
-    if (cursor > run.widthCm + 0.05) return cursor - run.widthCm;
+    if (cursor > hi + 0.05) return cursor - hi;
   } else {
     let cursor = x0;
     for (const u of units.filter((u) => u.x < x1 - 0.5).sort((a, b) => right(b) - right(a))) {
@@ -40,7 +50,7 @@ function pushClear(run: WallRun, x0: number, x1: number, away: End): WallRun | n
       if (d < 0) shift.set(u.id, d);
       cursor = Math.min(cursor, u.x + d);
     }
-    if (cursor < -0.05) return -cursor;
+    if (cursor < lo - 0.05) return lo - cursor;
   }
   for (const [host, ids] of ride) for (const id of ids) if (shift.has(host)) shift.set(id, shift.get(host)!);
   return { ...run, items: run.items.map((i) => (shift.has(i.id) ? { ...i, x: i.x + shift.get(i.id)! } : i)) };
@@ -59,8 +69,11 @@ const resizable = (i: KitchenItem) =>
  */
 function narrowNearest(run: WallRun, from: number, by: number, away: End): WallRun | null {
   const ride = riders(run);
+  // Only cabinets in the same stretch: never one on the other side of a partition wall (review finding R12).
+  const [lo, hi] = stretchAround(run, from, from);
   const candidates = run.items
     .filter((i) => resizable(i) && i.width - by >= MIN_CABINET)
+    .filter((i) => i.x >= lo - 0.5 && right(i) <= hi + 0.5)
     .filter((i) => (away === 'end' ? right(i) > from : i.x < from))
     .sort(
       (a, b) =>
@@ -126,21 +139,31 @@ export function insertFiller(
  * Make `needed` cm at the end of a full run for a scribe filler: narrow its widest cabinet, slide the units after it
  * back, and put the filler against the end wall.
  */
-export function addScribeFiller(data: ProjectData, runId: string, needed: number): ProjectData | string {
+export function addScribeFiller(
+  data: ProjectData,
+  runId: string,
+  needed: number,
+  /** The stretch of the run that is full (default: the whole run). */
+  [lo, hi]: [number, number] = [0, Infinity],
+): ProjectData | string {
   const run = data.walls.find((w) => w.id === runId);
   if (!run) return 'that run no longer exists';
+  const end = Math.min(hi, run.widthCm);
+  const inStretch = (i: KitchenItem) => i.x >= lo - 0.5 && right(i) <= end + 0.5;
   const target = run.items
-    .filter((i) => resizable(i) && i.width - needed >= MIN_CABINET)
+    .filter((i) => inStretch(i) && resizable(i) && i.width - needed >= MIN_CABINET)
     .sort((a, b) => b.width - a.width)[0];
   if (!target)
     return `no cabinet on ${run.name} can be narrowed by ${fmt(needed)} cm (they'd drop below ${MIN_CABINET} cm)`;
   const ride = riders(run);
   const moved = new Set(
-    run.items.filter((i) => isFloor(i) && i.x > target.x + 0.5).flatMap((u) => [u.id, ...(ride.get(u.id) ?? [])]),
+    run.items
+      .filter((i) => isFloor(i) && inStretch(i) && i.x > target.x + 0.5)
+      .flatMap((u) => [u.id, ...(ride.get(u.id) ?? [])]),
   );
   const items = run.items.map((i) =>
     i.id === target.id ? { ...i, width: i.width - needed } : moved.has(i.id) ? { ...i, x: i.x - needed } : i,
   );
-  const filler: KitchenItem = { ...createItem('filler'), x: run.widthCm - needed, width: needed };
+  const filler: KitchenItem = { ...createItem('filler'), x: end - needed, width: needed };
   return replaceRun(data, { ...run, items: [...items, filler] });
 }

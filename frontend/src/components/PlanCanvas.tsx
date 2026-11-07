@@ -33,6 +33,17 @@ type Drag =
   | (BoundaryDrag & { kind: 'wall' })
   | (BoundaryDrag & { kind: 'corner' })
   | {
+      /** A partition wall: slid along its host wall, or (length) its tip pulled along the partition. */
+      kind: 'partition';
+      partitionId: string;
+      mode: 'slide' | 'length';
+      /** Direction of the drag that counts, and the value it changes when the drag started. */
+      axis: { x: number; y: number };
+      startValue: number;
+      startPt: { x: number; y: number };
+      moved: boolean;
+    }
+  | {
       kind: 'island';
       runId: string;
       startPlan: { x: number; y: number };
@@ -49,6 +60,8 @@ interface Props {
   onMoveIsland: (runId: string, pos: { planX: number; planY: number }) => void;
   /** A wall dragged in the plan: the whole updated project (one undo step per drag). */
   onDragWall: (next: ProjectData) => void;
+  /** A partition wall moved along its host or resized in the plan. */
+  onUpdatePartition: (partitionId: string, change: { hostX?: number; length?: number }) => void;
   violations: Violation[];
 }
 
@@ -61,6 +74,7 @@ export function PlanCanvas({
   onMoveItem,
   onMoveIsland,
   onDragWall,
+  onUpdatePartition,
   violations,
 }: Props) {
   // Re-fit when the room's size changes, but not while (or because) a wall is being dragged: the view stays put.
@@ -118,6 +132,21 @@ export function PlanCanvas({
       };
       return;
     }
+    if (run.kind === 'partition') {
+      const host = data.walls.find((w) => w.id === run.hostId);
+      if (!host) return;
+      vp.svgRef.current!.setPointerCapture(e.pointerId);
+      drag.current = {
+        kind: 'partition',
+        partitionId: run.partitionId ?? '',
+        mode: 'slide',
+        axis: wallFrame(data.room, host).u,
+        startValue: run.hostX ?? 0,
+        startPt: toCm(e),
+        moved: false,
+      };
+      return;
+    }
     if (run.kind !== 'island') return;
     vp.svgRef.current!.setPointerCapture(e.pointerId);
     drag.current = {
@@ -143,6 +172,22 @@ export function PlanCanvas({
       normal2: segs[corner].n,
       shift: { x: 0, y: 0 },
       applied: '0:0',
+      moved: false,
+    };
+  };
+
+  const onPartitionTipPointerDown = (e: ReactPointerEvent, faceA: WallRun) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onActivate(faceA.id);
+    vp.svgRef.current!.setPointerCapture(e.pointerId);
+    drag.current = {
+      kind: 'partition',
+      partitionId: faceA.partitionId ?? '',
+      mode: 'length',
+      axis: wallFrame(data.room, faceA).u,
+      startValue: faceA.widthCm,
+      startPt: toCm(e),
       moved: false,
     };
   };
@@ -173,6 +218,17 @@ export function PlanCanvas({
       d.shift = { x: -result.shift.x, y: -result.shift.y };
       d.applied = key;
       onDragWall(result.data);
+      return;
+    }
+    if (d.kind === 'partition') {
+      const raw = (pt.x - d.startPt.x) * d.axis.x + (pt.y - d.startPt.y) * d.axis.y;
+      if (!d.moved && Math.abs(raw) * PLAN_SCALE < 3) return;
+      d.moved = true;
+      const value = snapTo(d.startValue + raw, e.shiftKey ? 1 : ISLAND_GRID_CM);
+      const faceA = dataRef.current.walls.find((w) => w.partitionId === d.partitionId && w.face !== 'b');
+      const current = d.mode === 'slide' ? faceA?.hostX : faceA?.widthCm;
+      if (value !== current)
+        onUpdatePartition(d.partitionId, d.mode === 'slide' ? { hostX: value } : { length: value });
       return;
     }
     const current = dataRef.current;
@@ -232,6 +288,7 @@ export function PlanCanvas({
           onItemPointerDown={onItemPointerDown}
           onRunPointerDown={onRunPointerDown}
           onCornerPointerDown={onCornerPointerDown}
+          onPartitionTipPointerDown={onPartitionTipPointerDown}
           violations={violations}
         />
       </svg>

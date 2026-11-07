@@ -1,4 +1,4 @@
-import type { KitchenItem, ProjectData, Room, WallRun } from '../types';
+import type { KitchenItem, ProjectData, Room, Rotation, WallRun } from '../types';
 import {
   bounds,
   cornerKind,
@@ -16,6 +16,7 @@ import {
   computeOverlaps,
   countersOnUnits,
   carriesCountertop,
+  isJoint,
   layerOf,
   normalizeWall,
   round1,
@@ -53,7 +54,20 @@ export function islandRect(run: WallRun): Rect {
   return { x: run.planX ?? 0, y: run.planY ?? 0, w: quarter ? dep : len, h: quarter ? len : dep };
 }
 
+const DIRECTION: Record<Rotation, Pt> = {
+  0: { x: 1, y: 0 },
+  90: { x: 0, y: 1 },
+  180: { x: -1, y: 0 },
+  270: { x: 0, y: -1 },
+};
+const rotationOf = (u: Pt): Rotation => (u.x > 0.5 ? 0 : u.y > 0.5 ? 90 : u.x < -0.5 ? 180 : 270);
+
 export function wallFrame(room: Room, run: WallRun): Frame {
+  if (run.kind === 'partition') {
+    // Stored by syncPartitions: the face's start point and the direction it runs in.
+    const u = DIRECTION[run.rotationDeg ?? 0];
+    return { origin: { x: run.planX ?? 0, y: run.planY ?? 0 }, u, n: { x: 0 - u.y, y: u.x }, length: run.widthCm };
+  }
   if (run.kind === 'wall') {
     // A wall is a segment of the room outline: x runs from its start (left as seen from inside) to its end.
     const seg = segments(roomOutline(room))[segmentIndex(run)];
@@ -141,10 +155,16 @@ export function computePlanConflicts(data: ProjectData): PlanConflict[] {
       conflicts.push({ a: p.item.id, b: q.item.id, rect: rectIntersection(p.rect, q.rect), kind: 'clash' });
     }
   }
-  for (const run of data.walls.filter((w) => w.kind === 'wall' && !w.removed)) {
+  for (const run of data.walls.filter((w) => (w.kind === 'wall' && !w.removed) || w.kind === 'partition')) {
     const f = wallFrame(data.room, run);
     for (const door of run.items.filter((i) => i.category === 'door' && i.doorSwing !== 'out')) {
       const swing = doorSwingRect(f, door);
+      // A partition wall in the way of the leaf (review finding R13), other than the one the door is in.
+      for (const { run: part, rect } of partitionRects(data)) {
+        if (part.partitionId === run.partitionId && run.kind === 'partition') continue;
+        if (rectsOverlap(swing, rect))
+          conflicts.push({ a: door.id, b: part.id, rect: rectIntersection(swing, rect), kind: 'swing' });
+      }
       for (const p of placed) {
         if (p.run.id === run.id || layerOf(p.item.category) !== 'floor' || !rectsOverlap(swing, p.rect)) continue;
         conflicts.push({ a: door.id, b: p.item.id, rect: rectIntersection(swing, p.rect), kind: 'swing' });
@@ -162,6 +182,21 @@ export function computePlanConflicts(data: ProjectData): PlanConflict[] {
     const r = islandRect(run);
     if (!rectInOutline(outline, r)) conflicts.push({ a: run.id, rect: r, kind: 'outside' });
   }
+  // Partition walls (#10): inside the room, and not through units of other runs (its host is handled by the joint).
+  for (const run of data.walls.filter((w) => w.kind === 'partition' && w.face !== 'b')) {
+    const body = partitionRect(data.room, run);
+    if (!rectInOutline(outline, body)) conflicts.push({ a: run.id, rect: body, kind: 'outside' });
+    for (const p of placed) {
+      if (p.run.id === run.hostId || p.run.partitionId === run.partitionId) continue;
+      if (layerOf(p.item.category) !== 'floor' || !rectsOverlap(body, p.rect)) continue;
+      conflicts.push({ a: p.item.id, b: run.id, rect: rectIntersection(body, p.rect), kind: 'clash' });
+    }
+    for (const isl of data.walls.filter((w) => w.kind === 'island')) {
+      const r = islandRect(isl);
+      if (rectsOverlap(body, r))
+        conflicts.push({ a: isl.id, b: run.id, rect: rectIntersection(body, r), kind: 'clash' });
+    }
+  }
   return conflicts;
 }
 
@@ -170,17 +205,19 @@ export function computePlanConflicts(data: ProjectData): PlanConflict[] {
  * moves back only as far as needed to clear the end of the wall and the unit after it (order is kept). Counter
  * items move with the unit they stand on. Units overlap only when the layer truly doesn't fit.
  */
-function fitToLength(run: WallRun, length: number): WallRun {
-  if (length >= run.widthCm) return run;
+function fitToLength(run: WallRun, length: number, fixed: KitchenItem[] = []): WallRun {
   const end = (i: KitchenItem) => i.x + i.width;
+  if (length >= run.widthCm) return run;
   const shift = new Map<string, number>();
   // Walking from the far end, each unit stops at the wall end or at the new position of a unit to its right that it
-  // can actually collide with (same height band, or a tall unit vs. a wall cabinet / window).
-  const placed: { item: KitchenItem; x: number }[] = [];
+  // can actually collide with (same height band, or a tall unit vs. a wall cabinet / window). Partition joints
+  // (`fixed`) don't move: units stop at them too, and aren't pushed back across one (review finding R14).
+  const placed: { item: KitchenItem; x: number }[] = fixed.map((j) => ({ item: j, x: j.x }));
   const units = run.items.filter((i) => ['floor', 'upper'].includes(layerOf(i.category)));
   for (const u of units.sort((a, b) => end(b) - end(a))) {
     const limit = Math.min(length, ...placed.filter((p) => p.item.x >= u.x && canCollide(u, p.item)).map((p) => p.x));
-    const x = Math.max(0, Math.min(u.x, limit - u.width));
+    const floor = Math.max(0, ...fixed.filter((j) => end(j) <= u.x + 0.5).map(end));
+    const x = Math.max(floor, Math.min(u.x, limit - u.width));
     if (x !== u.x) shift.set(u.id, x - u.x);
     placed.push({ item: u, x });
   }
@@ -193,19 +230,20 @@ function fitToLength(run: WallRun, length: number): WallRun {
  * The mirror of fitToLength, for units pushed past the START of a run (x < 0, e.g. when dragging the previous wall
  * shortens this one from its start): walking from the start, each unit moves forward only as far as needed to clear
  * the start and the units before it that it can collide with (order is kept; counter items move with their unit).
- * Review finding R11.
+ * Partition joints (`fixed`) stay put and stop units the same way. Review findings R11, R14.
  */
-function fitFromStart(run: WallRun): WallRun {
+function fitFromStart(run: WallRun, fixed: KitchenItem[] = []): WallRun {
   const units = run.items.filter((i) => ['floor', 'upper'].includes(layerOf(i.category)));
   if (!units.some((u) => u.x < 0)) return run;
   const shift = new Map<string, number>();
-  const placed: { item: KitchenItem; x: number }[] = [];
+  const placed: { item: KitchenItem; x: number }[] = fixed.map((j) => ({ item: j, x: j.x }));
   for (const u of units.sort((a, b) => a.x - b.x)) {
     const limit = Math.max(
       0,
       ...placed.filter((p) => p.item.x <= u.x && canCollide(u, p.item)).map((p) => p.x + p.item.width),
     );
-    const x = Math.max(u.x, limit);
+    const ceiling = Math.min(Infinity, ...fixed.filter((j) => j.x >= u.x + u.width - 0.5).map((j) => j.x));
+    const x = Math.min(Math.max(u.x, limit), Math.max(u.x, ceiling - u.width));
     if (x !== u.x) shift.set(u.id, x - u.x);
     placed.push({ item: u, x });
   }
@@ -223,13 +261,23 @@ export function syncRoom(data: ProjectData): ProjectData {
   const box = bounds(outline);
   const room: Room = { ...data.room, outline, widthCm: box.w, depthCm: box.h };
   const segs = segments(outline);
-  return {
+  return syncPartitions({
     ...data,
     room,
     walls: data.walls.map((w) => {
       const seg = w.kind === 'wall' ? segs[segmentIndex(w)] : undefined;
       const widthCm = seg ? round1(seg.length) : w.widthCm;
-      let run: WallRun = { ...fitToLength(fitFromStart(w), widthCm), heightCm: room.heightCm, widthCm };
+      // Partition joints stay put while units are fitted (clamped onto the new length, as syncPartitions will),
+      // and are re-derived by syncPartitions afterwards.
+      const joints = w.items
+        .filter(isJoint)
+        .map((j) => ({ ...j, x: Math.min(j.x, Math.max(0, widthCm - WALL_THICKNESS_CM)) }));
+      const own = { ...w, items: w.items.filter((i) => !isJoint(i)) };
+      let run: WallRun = {
+        ...fitToLength(fitFromStart(own, joints), widthCm, joints),
+        heightCm: room.heightCm,
+        widthCm,
+      };
       if (seg) run = { ...run, segment: seg.index, side: seg.side };
       if (run.kind === 'island') {
         const r = islandRect(run);
@@ -246,7 +294,120 @@ export function syncRoom(data: ProjectData): ProjectData {
       }
       return normalizeWall(run);
     }),
+  });
+}
+
+/** Shortest partition wall (cm). */
+export const MIN_PARTITION_CM = 20;
+
+/**
+ * Frame of one face of a partition wall standing at `hostX` on `host` (FEATURES.md #10). Side A starts at the host
+ * wall (its left end, as seen facing it) and runs into the room; side B is the other face, so it runs back towards
+ * the host and ends there. The partition's body is wall-local depth −T…0 on either face.
+ */
+export function partitionFrame(room: Room, host: WallRun, hostX: number, length: number, face: 'a' | 'b'): Frame {
+  const hf = wallFrame(room, host);
+  const T = WALL_THICKNESS_CM;
+  if (face === 'a') return { origin: toPlan(hf, hostX, 0), u: hf.n, n: { x: 0 - hf.u.x, y: 0 - hf.u.y }, length };
+  return { origin: toPlan(hf, hostX + T, length), u: { x: 0 - hf.n.x, y: 0 - hf.n.y }, n: hf.u, length };
+}
+
+/** Plan footprint of a partition wall, from either of its faces. */
+export const partitionRect = (room: Room, face: WallRun): Rect =>
+  localRect(wallFrame(room, face), 0, face.widthCm, -WALL_THICKNESS_CM, 0);
+
+/** Plan footprints of all partition walls (one per partition). */
+export const partitionRects = (data: ProjectData): { run: WallRun; rect: Rect }[] =>
+  data.walls
+    .filter((w) => w.kind === 'partition' && w.face !== 'b')
+    .map((run) => ({ run, rect: partitionRect(data.room, run) }));
+
+/** Whether the straight line a → b passes through the inside of `r` (touching its edges doesn't count). */
+export function segmentHitsRect(a: Pt, b: Pt, r: Rect): boolean {
+  // Liang–Barsky clipping against the rectangle shrunk by a hair.
+  const e = 0.01;
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const clip = (p: number, q: number) => {
+    if (Math.abs(p) < 1e-12) return q > 0;
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    return t0 < t1;
   };
+  return (
+    clip(-dx, a.x - (r.x + e)) &&
+    clip(dx, r.x + r.w - e - a.x) &&
+    clip(-dy, a.y - (r.y + e)) &&
+    clip(dy, r.y + r.h - e - a.y)
+  );
+}
+
+/** The derived item that blocks the host wall where a partition stands (see `isJoint`). */
+function jointItem(partitionId: string, hostX: number, height: number): KitchenItem {
+  return {
+    id: `joint-${partitionId}`,
+    category: 'partition_joint',
+    label: 'Partition',
+    x: hostX,
+    y: 0,
+    width: WALL_THICKNESS_CM,
+    height,
+    depth: 0,
+    hasToeKick: false,
+    toeKickHeight: 10,
+    frontType: 'doors',
+    doorCount: 1,
+    drawerCount: 1,
+    drawerSplitPcts: [100],
+  };
+}
+
+/**
+ * Keep partitions consistent with their host walls: side A's geometry is the truth (position clamped onto the host,
+ * length at least MIN_PARTITION_CM), both faces get their frame, and each host gets one joint item per partition.
+ * A partition whose host wall is gone or removed is dropped.
+ */
+function syncPartitions(data: ProjectData): ProjectData {
+  const hosts = new Map(data.walls.filter((w) => w.kind === 'wall' && !w.removed).map((w) => [w.id, w]));
+  const geometry = new Map<string, { host: WallRun; hostX: number; length: number }>();
+  const faces = data.walls.filter((w) => w.kind === 'partition');
+  for (const r of [...faces].sort((p, q) => (p.face === 'a' ? 0 : 1) - (q.face === 'a' ? 0 : 1))) {
+    const host = hosts.get(r.hostId ?? '');
+    if (!r.partitionId || !host || geometry.has(r.partitionId)) continue;
+    const hostX = round1(Math.min(Math.max(0, r.hostX ?? 0), Math.max(0, host.widthCm - WALL_THICKNESS_CM)));
+    geometry.set(r.partitionId, { host, hostX, length: round1(Math.max(MIN_PARTITION_CM, r.widthCm)) });
+  }
+  if (!faces.length && !data.walls.some((w) => w.items.some(isJoint))) return data;
+  const walls = data.walls.flatMap((r): WallRun[] => {
+    if (r.kind === 'partition') {
+      const g = geometry.get(r.partitionId ?? '');
+      if (!g) return [];
+      const f = partitionFrame(data.room, g.host, g.hostX, g.length, r.face ?? 'a');
+      return [
+        normalizeWall({
+          ...r,
+          hostId: g.host.id,
+          hostX: g.hostX,
+          widthCm: g.length,
+          heightCm: data.room.heightCm,
+          planX: round1(f.origin.x),
+          planY: round1(f.origin.y),
+          rotationDeg: rotationOf(f.u),
+        }),
+      ];
+    }
+    if (r.kind !== 'wall') return [r];
+    const joints = [...geometry]
+      .filter(([, g]) => g.host.id === r.id)
+      .map(([id, g]) => jointItem(id, g.hostX, data.room.heightCm));
+    const items = r.items.filter((i) => !isJoint(i));
+    return joints.length || items.length !== r.items.length ? [{ ...r, items: [...items, ...joints] }] : [r];
+  });
+  const activeWallId = walls.some((w) => w.id === data.activeWallId) ? data.activeWallId : walls[0].id;
+  return { ...data, walls, activeWallId };
 }
 
 /** Plain-language consequences of changing the room from `before` to `after` (empty when nothing breaks). */
@@ -262,10 +423,14 @@ export function roomChangeWarnings(before: ProjectData, after: ProjectData): str
       const n = new Set(added.flatMap((o) => [o.a, o.b])).size;
       out.push(`${old.name} becomes ${round1(run.widthCm)} cm: ${n} of its elements no longer fit and will overlap.`);
     }
-    if (run.kind === 'island') {
-      const inside = (d: ProjectData, r: Rect) => rectInOutline(roomOutline(d.room), r);
-      if (inside(before, islandRect(old)) && !inside(after, islandRect(run)))
-        out.push(`${old.name} no longer fits in the room.`);
+    const inside = (d: ProjectData, r: Rect) => rectInOutline(roomOutline(d.room), r);
+    if (run.kind === 'island' && inside(before, islandRect(old)) && !inside(after, islandRect(run)))
+      out.push(`${old.name} no longer fits in the room.`);
+    // Review finding R14: a partition that ends up sticking out of the room (reported once, from side A).
+    if (run.kind === 'partition' && run.face !== 'b') {
+      const fitted = inside(before, partitionRect(before.room, old));
+      if (fitted && !inside(after, partitionRect(after.room, run)))
+        out.push(`${(old.name.match(/^Partition \d+/) ?? [old.name])[0]} no longer fits in the room.`);
     }
   }
   return out;
@@ -289,6 +454,14 @@ export type RunEnd =
  */
 export function runEnds(data: ProjectData, run: WallRun): { start: RunEnd; end: RunEnd } {
   const open = { kind: 'open', runId: run.id } as const;
+  if (run.kind === 'partition') {
+    // Side A starts at its host wall, side B ends there; the far end is free-standing.
+    const host = data.walls.find((w) => w.id === run.hostId);
+    if (!host) return { start: open, end: open };
+    return run.face === 'b'
+      ? { start: open, end: { kind: 'inside_corner', runId: run.id, neighbourId: host.id, neighbourEnd: 'start' } }
+      : { start: { kind: 'inside_corner', runId: run.id, neighbourId: host.id, neighbourEnd: 'end' }, end: open };
+  }
   if (run.kind !== 'wall' || run.removed) return { start: open, end: open };
   const outline = roomOutline(data.room);
   const n = outline.length;

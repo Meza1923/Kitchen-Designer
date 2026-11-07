@@ -2,7 +2,7 @@
 import type { KitchenItem, ProjectData, WallRun } from '../../types';
 import { CATEGORY_LABELS } from '../defaults';
 import { fmt, fridgeDoors, layerOf } from '../geometry';
-import { runEnds, type Rect } from '../plan';
+import { runEnds, WALL_THICKNESS_CM, type Rect } from '../plan';
 
 /** error = physical conflict (red frame) · warning = good-practice guideline (amber frame) · info = list only. */
 export type Severity = 'error' | 'warning' | 'info';
@@ -66,33 +66,77 @@ export const floorUnits = (run: WallRun) => run.items.filter((i) => layerOf(i.ca
 
 export type End = 'start' | 'end';
 
-/** Distance (cm) along the run from the item to one end of the run. */
-export const distToEnd = (run: WallRun, i: KitchenItem, end: End) =>
-  end === 'start' ? i.x : run.widthCm - (i.x + i.width);
-
-/** One run's side of an inside corner; every corner appears twice, once from each run. */
+/**
+ * One run's side of an inside corner; every corner appears twice, once from each run. `pos` is where the corner is
+ * along the run (0 or its length at a room corner; in the middle of a wall where a partition stands on it, #10), and
+ * `end` says which side of it the run's units are on: 'start' = they stand after it, 'end' = before it.
+ */
 export interface Corner {
   run: WallRun;
   end: End;
+  pos: number;
   neighbour: WallRun;
   neighbourEnd: End;
+  neighbourPos: number;
+}
+
+/** Distance (cm) from an item to a corner position along its run; Infinity when it stands on the other side. */
+function distTo(i: KitchenItem, end: End, pos: number): number {
+  const centre = i.x + i.width / 2;
+  if (end === 'start') return centre < pos ? Infinity : i.x - pos;
+  return centre > pos ? Infinity : pos - (i.x + i.width);
+}
+/** Distance from one of the corner run's items to the corner. */
+export const cornerDist = (c: Corner, i: KitchenItem) => distTo(i, c.end, c.pos);
+/** Distance from one of the neighbour's items to the corner. */
+export const neighbourDist = (c: Corner, i: KitchenItem) => distTo(i, c.neighbourEnd, c.neighbourPos);
+
+/** Where the neighbour's corner is along the neighbour: a run end, or a partition's T-joint on its host wall. */
+function neighbourPosOf(run: WallRun, neighbour: WallRun, end: End): number {
+  if (run.kind === 'partition' && neighbour.id === run.hostId) {
+    const x = run.hostX ?? 0;
+    return run.face === 'b' ? x + WALL_THICKNESS_CM : x;
+  }
+  return end === 'start' ? 0 : neighbour.widthCm;
 }
 
 export function corners(data: ProjectData): Corner[] {
-  return liveRuns(data).flatMap((run) => {
+  const out = liveRuns(data).flatMap((run) => {
     const ends = runEnds(data, run);
-    return (['start', 'end'] as const).flatMap((end) => {
+    return (['start', 'end'] as const).flatMap((end): Corner[] => {
       const e = ends[end];
       if (e.kind !== 'inside_corner') return [];
       const neighbour = data.walls.find((w) => w.id === e.neighbourId);
-      return neighbour ? [{ run, end, neighbour, neighbourEnd: e.neighbourEnd }] : [];
+      if (!neighbour) return [];
+      const pos = end === 'start' ? 0 : run.widthCm;
+      return [
+        {
+          run,
+          end,
+          pos,
+          neighbour,
+          neighbourEnd: e.neighbourEnd,
+          neighbourPos: neighbourPosOf(run, neighbour, e.neighbourEnd),
+        },
+      ];
     });
   });
+  // A T-joint is only seen from the partition's side by runEnds; add the host wall's side of it.
+  const mirrors = out
+    .filter((c) => c.run.kind === 'partition')
+    .map((c) => ({
+      run: c.neighbour,
+      end: c.neighbourEnd,
+      pos: c.neighbourPos,
+      neighbour: c.run,
+      neighbourEnd: c.end,
+      neighbourPos: c.pos,
+    }));
+  return [...out, ...mirrors];
 }
 
 /** The neighbour's floor units standing in the corner (touching its corner end). */
-export const cornerUnits = (c: Corner) =>
-  floorUnits(c.neighbour).filter((i) => distToEnd(c.neighbour, i, c.neighbourEnd) < 1);
+export const cornerUnits = (c: Corner) => floorUnits(c.neighbour).filter((i) => neighbourDist(c, i) < 1);
 
 /** How far the neighbour's corner units reach out of the corner along this run; 0 when the corner is free. */
 export const cornerDepth = (c: Corner) => Math.max(0, ...cornerUnits(c).map((i) => i.depth));

@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { KitchenItem, WallRun } from '../types';
-import { computeCountertops, computeGaps, fmt, itemsInLayer, layerOf, type Gap } from '../lib/geometry';
+import { computeCountertops, computeGaps, fmt, isJoint, itemsInLayer, layerOf, type Gap } from '../lib/geometry';
 import { severityByItem, type Violation } from '../lib/rules';
 import { FONT, INK, ItemShape, itemBounds, THIN, type ShapeContext } from './ItemShape';
 
@@ -178,25 +178,47 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
   const electrical = itemsInLayer(wall, 'electrical');
   const selected = wall.items.find((i) => i.id === selectedId);
 
-  const renderItem = (item: KitchenItem) => (
-    <g
-      key={item.id}
-      data-item-id={item.id}
-      style={
-        interactive
-          ? {
-              cursor:
-                ['upper', 'electrical'].includes(layerOf(item.category)) && item.category !== 'door'
-                  ? 'move'
-                  : 'ew-resize',
-            }
-          : undefined
-      }
-      onPointerDown={onItemPointerDown ? (e) => onItemPointerDown(e, item) : undefined}
-    >
-      <ItemShape item={item} ctx={ctx} />
-    </g>
-  );
+  const renderItem = (item: KitchenItem) =>
+    isJoint(item) ? (
+      // Where a partition wall meets this wall (#10): its cut section, full height, not selectable.
+      <g key={item.id} data-joint style={{ pointerEvents: 'none' }}>
+        <rect
+          x={item.x * S}
+          y={(H - item.y - item.height) * S}
+          width={item.width * S}
+          height={item.height * S}
+          fill="url(#hatch)"
+          stroke={INK}
+          strokeWidth={1.75}
+        />
+        <Label
+          x={(item.x + item.width / 2) * S}
+          y={(H - item.height / 2) * S}
+          text="PARTITION"
+          size={8}
+          weight={700}
+          rotate={-90}
+        />
+      </g>
+    ) : (
+      <g
+        key={item.id}
+        data-item-id={item.id}
+        style={
+          interactive
+            ? {
+                cursor:
+                  ['upper', 'electrical'].includes(layerOf(item.category)) && item.category !== 'door'
+                    ? 'move'
+                    : 'ew-resize',
+              }
+            : undefined
+        }
+        onPointerDown={onItemPointerDown ? (e) => onItemPointerDown(e, item) : undefined}
+      >
+        <ItemShape item={item} ctx={ctx} />
+      </g>
+    );
 
   // Dimension rows (px, relative to the wall's top-left corner).
   const rowFloorLabels = Hpx + 16;
