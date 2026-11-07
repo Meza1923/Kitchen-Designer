@@ -104,8 +104,13 @@ export function resizeWall(data: ProjectData, wallId: string, length: number): P
 export function dragWall(data: ProjectData, wallId: string, delta: number): { data: ProjectData; shift: Pt } | string {
   const wall = data.walls.find((w) => w.id === wallId);
   if (!wall || wall.kind !== 'wall') return 'that wall no longer exists';
+  return moveSegment(data, segmentIndex(wall), delta);
+}
+
+/** `dragWall` by outline segment, so walls that were removed (open sides) can move too. */
+function moveSegment(data: ProjectData, index: number, delta: number): { data: ProjectData; shift: Pt } | string {
+  if (delta === 0) return { data, shift: { x: 0, y: 0 } };
   const outline = roomOutline(data.room);
-  const index = segmentIndex(wall);
   const result = moveWall(outline, index, delta);
   if (typeof result === 'string') return result;
   const segs = segments(outline);
@@ -123,4 +128,29 @@ export function dragWall(data: ProjectData, wallId: string, delta: number): { da
   const box = bounds(result.outline);
   const room = { ...data.room, outline: result.outline, widthCm: box.w, depthCm: box.h };
   return { data: syncRoom({ ...data, room, walls }), shift };
+}
+
+/**
+ * The project with room corner `corner` (outline point: where segment corner−1 ends and segment `corner` starts)
+ * dragged. `intoPrev` / `intoNext` are how far the two walls meeting there move along their normals (positive = into
+ * the room), so the corner stays at 90° and the room stays closed. Works like `dragWall` for cabinets and islands, and
+ * returns the total shift of the plan's coordinates. Returns a sentence when the move isn't possible.
+ */
+export function dragCorner(
+  data: ProjectData,
+  corner: number,
+  intoPrev: number,
+  intoNext: number,
+): { data: ProjectData; shift: Pt } | string {
+  const n = roomOutline(data.room).length;
+  if (corner < 0 || corner >= n) return 'that corner no longer exists';
+  // The two walls are perpendicular, so the moves are independent: each changes the other wall's length only.
+  const first = moveSegment(data, (corner + n - 1) % n, intoPrev);
+  if (typeof first === 'string') return first;
+  const second = moveSegment(first.data, corner, intoNext);
+  if (typeof second === 'string') return second;
+  return {
+    data: second.data,
+    shift: { x: first.shift.x + second.shift.x, y: first.shift.y + second.shift.y },
+  };
 }

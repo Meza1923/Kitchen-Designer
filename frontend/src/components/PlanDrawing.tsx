@@ -57,6 +57,8 @@ export interface PlanDrawingProps {
   interactive?: boolean;
   onItemPointerDown?: (e: ReactPointerEvent, run: WallRun, item: KitchenItem) => void;
   onRunPointerDown?: (e: ReactPointerEvent, run: WallRun) => void;
+  /** A room corner grabbed (index of the outline point), to drag both walls meeting there. */
+  onCornerPointerDown?: (e: ReactPointerEvent, corner: number) => void;
   /** Rule violations for the project (see lib/rules.ts). */
   violations: Violation[];
 }
@@ -68,6 +70,7 @@ export function PlanDrawing({
   interactive,
   onItemPointerDown,
   onRunPointerDown,
+  onCornerPointerDown,
   violations,
 }: PlanDrawingProps) {
   const { room } = data;
@@ -624,6 +627,37 @@ export function PlanDrawing({
                 strokeWidth={2}
                 style={{ pointerEvents: 'none' }}
               />
+            );
+          })}
+
+        {/* Corner handles: the T × T square outside each corner, where the two wall bands meet */}
+        {interactive &&
+          onCornerPointerDown &&
+          outline.map((c, k) => {
+            const a = segs[(k + segs.length - 1) % segs.length].n;
+            const b = segs[k].n;
+            const o = { x: c.x - T * (a.x + b.x), y: c.y - T * (a.y + b.y) };
+            const x = Math.min(c.x, o.x) * S;
+            const y = Math.min(c.y, o.y) * S;
+            return (
+              <g
+                key={`corner-${k}`}
+                data-corner={k}
+                onPointerDown={(e) => onCornerPointerDown(e, k)}
+                style={{ cursor: 'move' }}
+              >
+                <title>Drag to move this corner</title>
+                <rect x={x} y={y} width={t} height={t} fill="transparent" />
+                <rect
+                  x={x + t / 2 - 4}
+                  y={y + t / 2 - 4}
+                  width={8}
+                  height={8}
+                  fill="#fff"
+                  stroke={SELECT}
+                  strokeWidth={1.5}
+                />
+              </g>
             );
           })}
 

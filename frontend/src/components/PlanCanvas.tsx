@@ -3,28 +3,35 @@ import type { KitchenItem, ProjectData, WallRun } from '../types';
 import type { Violation } from '../lib/rules';
 import { snapX } from '../lib/geometry';
 import { planPointToWallX, snapTo, wallFrame } from '../lib/plan';
-import { dragWall } from '../lib/roomShape';
+import { dragCorner, dragWall } from '../lib/roomShape';
+import { roomOutline, segments } from '../lib/outline';
 import { planOrigin, PlanDrawing, planSize } from './PlanDrawing';
 import { GridBackground, useShiftHeld, useViewport, ZoomControls } from './viewport';
 
 export const PLAN_SCALE = 2; // px per cm at 100% zoom
 const ISLAND_GRID_CM = 5;
 
+/** Dragging a wall or a room corner. */
+interface BoundaryDrag {
+  /** The wall dragged, or (corner) the outline point index as a string. */
+  runId: string;
+  /** The project when the drag started: every move is computed from it, so nothing drifts. */
+  start: ProjectData;
+  startPt: { x: number; y: number };
+  /** The wall's normal; for a corner, the normals of the wall ending and the wall starting there. */
+  normal: { x: number; y: number };
+  normal2?: { x: number; y: number };
+  /** How far the plan's coordinates have moved so far (the room's top-left stays at 0, 0). */
+  shift: { x: number; y: number };
+  /** Last snapped distance(s) applied, to skip moves that don't change them. */
+  applied: string;
+  moved: boolean;
+}
+
 type Drag =
   | { kind: 'item'; runId: string; itemId: string; startX: number; startProj: number; moved: boolean }
-  | {
-      kind: 'wall';
-      runId: string;
-      /** The project when the drag started: every move is computed from it, so nothing drifts. */
-      start: ProjectData;
-      startPt: { x: number; y: number };
-      normal: { x: number; y: number };
-      /** How far the plan's coordinates have moved so far (the room's top-left stays at 0, 0). */
-      shift: { x: number; y: number };
-      /** Last snapped distance applied, to skip moves that don't change it. */
-      applied: number;
-      moved: boolean;
-    }
+  | (BoundaryDrag & { kind: 'wall' })
+  | (BoundaryDrag & { kind: 'corner' })
   | {
       kind: 'island';
       runId: string;
@@ -106,7 +113,7 @@ export function PlanCanvas({
         startPt: toCm(e),
         normal: wallFrame(data.room, run).n,
         shift: { x: 0, y: 0 },
-        applied: 0,
+        applied: '0',
         moved: false,
       };
       return;
@@ -122,26 +129,49 @@ export function PlanCanvas({
     };
   };
 
+  const onCornerPointerDown = (e: ReactPointerEvent, corner: number) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    vp.svgRef.current!.setPointerCapture(e.pointerId);
+    const segs = segments(roomOutline(data.room));
+    drag.current = {
+      kind: 'corner',
+      runId: String(corner),
+      start: data,
+      startPt: toCm(e),
+      normal: segs[(corner + segs.length - 1) % segs.length].n,
+      normal2: segs[corner].n,
+      shift: { x: 0, y: 0 },
+      applied: '0:0',
+      moved: false,
+    };
+  };
+
   const onPointerMove = (e: ReactPointerEvent) => {
     if (vp.movePan(e)) return;
     const d = drag.current;
     if (!d) return;
     const pt = toCm(e);
-    if (d.kind === 'wall') {
-      // Pointer in the drag's starting coordinates, then its distance along the wall's normal (into the room).
-      const raw = (pt.x + d.shift.x - d.startPt.x) * d.normal.x + (pt.y + d.shift.y - d.startPt.y) * d.normal.y;
-      if (!d.moved && Math.abs(raw) * PLAN_SCALE < 3) return;
+    if (d.kind === 'wall' || d.kind === 'corner') {
+      // Pointer in the drag's starting coordinates, then its distance along each moving wall's normal (into the room).
+      const mx = pt.x + d.shift.x - d.startPt.x;
+      const my = pt.y + d.shift.y - d.startPt.y;
+      if (!d.moved && Math.hypot(mx, my) * PLAN_SCALE < 3) return;
+      const step = e.shiftKey ? 1 : ISLAND_GRID_CM;
+      const along = (n: { x: number; y: number }) => snapTo(mx * n.x + my * n.y, step);
+      const a = along(d.normal);
+      const b = d.normal2 ? along(d.normal2) : 0;
+      const key = d.kind === 'corner' ? `${a}:${b}` : String(a);
+      if (key === d.applied) return; // same snapped position: nothing to redo
       d.moved = true;
       draggingWall.current = true;
-      const delta = snapTo(raw, e.shiftKey ? 1 : ISLAND_GRID_CM);
-      if (delta === d.applied) return; // same snapped position: nothing to redo
-      const result = dragWall(d.start, d.runId, delta);
+      const result = d.kind === 'corner' ? dragCorner(d.start, Number(d.runId), a, b) : dragWall(d.start, d.runId, a);
       if (typeof result === 'string') return; // keep the last valid position
       // Keep the room still on screen when its top-left (the plan's origin) moves.
       // d.shift holds minus the previous shift, so this pans by (new shift − previous shift).
       vp.panBy((result.shift.x + d.shift.x) * PLAN_SCALE, (result.shift.y + d.shift.y) * PLAN_SCALE);
       d.shift = { x: -result.shift.x, y: -result.shift.y };
-      d.applied = delta;
+      d.applied = key;
       onDragWall(result.data);
       return;
     }
@@ -201,13 +231,14 @@ export function PlanCanvas({
           interactive
           onItemPointerDown={onItemPointerDown}
           onRunPointerDown={onRunPointerDown}
+          onCornerPointerDown={onCornerPointerDown}
           violations={violations}
         />
       </svg>
       <ZoomControls zoom={vp.zoom} onZoom={(f) => vp.zoomAt(f)} onFit={vp.fit} />
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
         <span className="font-semibold text-slate-700">PLAN</span>
-        {' · '}click a wall to make it active · drag items along their wall
+        {' · '}click a wall to make it active · drag walls, corners and items
         {' · '}
         {shiftHeld ? <span className="font-semibold text-amber-600">SNAP OFF</span> : 'Shift = freeform'}
       </div>

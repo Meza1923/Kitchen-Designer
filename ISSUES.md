@@ -164,3 +164,4 @@ Checked and working: dragging (with live red overlap feedback), Inspector width/
 - 2026-11-07: Asked Q4 for new feature #10 (connecting walls by their ends).
 - 2026-11-07: Added Reviewer view and recorded Owner decision for Q4 (#10 connecting walls): A + C (Corner dragging + Partition walls).
 - 2026-11-07: Q4 applied: PROJECT.md decision 13 and FEATURES.md #10.
+- 2026-11-07: Reviewed `feat/10-connect-walls` (#10 Phase A: corner dragging): 0 findings; ready for owner check in the app.

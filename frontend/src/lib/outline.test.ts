@@ -9,11 +9,12 @@ import {
   presetOutline,
   rectInOutline,
   rectOutline,
+  roomOutline,
   segments,
   setWallLength,
 } from './outline';
 import { computePlanConflicts, itemPlanRect, roomChangeWarnings, runEnds, syncRoom, wallFrame } from './plan';
-import { dragWall, reshapeRoom, resizeWall } from './roomShape';
+import { dragCorner, dragWall, reshapeRoom, resizeWall } from './roomShape';
 import { checkProject } from './rules';
 
 const item = (p: Partial<KitchenItem>): KitchenItem => ({ ...createItem(p.category ?? 'base_cabinet'), ...p });
@@ -240,15 +241,15 @@ describe('review findings R8–R10 (feature #6 phase 1)', () => {
   });
 });
 
-describe('dragging a wall (phase 1b)', () => {
-  const planRectOf = (data: ProjectData, wallIdx: number, itemId: string) => {
-    const w = data.walls[wallIdx];
-    return itemPlanRect(
-      wallFrame(data.room, w),
-      w.items.find((i) => i.id === itemId)!,
-    );
-  };
+const planRectOf = (data: ProjectData, wallIdx: number, itemId: string) => {
+  const w = data.walls[wallIdx];
+  return itemPlanRect(
+    wallFrame(data.room, w),
+    w.items.find((i) => i.id === itemId)!,
+  );
+};
 
+describe('dragging a wall (phase 1b)', () => {
   it('pulling the north wall of a rectangle in makes the room shallower, nothing else moves physically', () => {
     const room = { ...DEFAULT_ROOM };
     const walls = createRoomWalls(room);
@@ -304,5 +305,50 @@ describe('review finding R11 (phase 1b)', () => {
     const result = dragWall(syncRoom({ room, walls, activeWallId: walls[0].id }), walls[0].id, 50);
     if (typeof result === 'string') throw new Error(result);
     expect(result.data.walls[1].items[0].x).toBe(150);
+  });
+});
+
+describe('dragging a corner (#10 phase A)', () => {
+  it('pulling the south-east corner out grows both walls; cabinets keep their physical place', () => {
+    const room = { ...DEFAULT_ROOM };
+    const walls = createRoomWalls(room);
+    walls[2].items = [item({ id: 's', x: 100 })]; // south wall, measured from its east end
+    walls[1].items = [item({ id: 'e', x: 100 })]; // east wall, measured from its north end
+    const data = syncRoom({ room, walls, activeWallId: walls[0].id });
+    // Pointer +50 east, +30 south: the east wall moves 50 out, the south wall 30 out.
+    const result = dragCorner(data, 2, -50, -30);
+    if (typeof result === 'string') throw new Error(result);
+    const after = result.data;
+    expect([after.room.widthCm, after.room.depthCm]).toEqual([450, 330]);
+    expect(result.shift).toEqual({ x: 0, y: 0 });
+    expect(after.walls.map((w) => w.widthCm)).toEqual([450, 330, 450, 330]);
+    const before = { s: planRectOf(data, 2, 's'), e: planRectOf(data, 1, 'e') };
+    expect(planRectOf(after, 2, 's')).toEqual({ ...before.s, y: before.s.y + 30 });
+    expect(planRectOf(after, 1, 'e')).toEqual({ ...before.e, x: before.e.x + 50 });
+  });
+
+  it('pushing the north-west corner in shifts the plan origin and keeps islands in place', () => {
+    const room = { ...DEFAULT_ROOM };
+    const walls = createRoomWalls(room);
+    walls.push({ ...createIsland(room, walls), id: 'isl', planX: 150, planY: 150, widthCm: 120, depthCm: 60 });
+    const data = syncRoom({ room, walls, activeWallId: walls[0].id });
+    const result = dragCorner(data, 0, 40, 20); // west wall 40 in, north wall 20 in
+    if (typeof result === 'string') throw new Error(result);
+    expect([result.data.room.widthCm, result.data.room.depthCm]).toEqual([360, 280]);
+    expect(result.shift).toEqual({ x: -40, y: -20 });
+    const isl = result.data.walls.find((w) => w.id === 'isl')!;
+    expect([isl.planX, isl.planY]).toEqual([110, 130]);
+  });
+
+  it('moves the inside corner of an L diagonally and keeps every corner at 90°', () => {
+    const l = lProject();
+    const result = dragCorner(l, 3, -50, -50); // the corner at (250, 150) to (300, 200)
+    if (typeof result === 'string') throw new Error(result);
+    expect(roomOutline(result.data.room)[3]).toEqual({ x: 300, y: 200 });
+    expect(result.data.walls.map((w) => w.widthCm)).toEqual([400, 200, 100, 100, 300, 300]);
+  });
+
+  it('refuses a move that would make a wall vanish', () => {
+    expect(dragCorner(lProject(), 3, 0, -160)).toMatch(/shorter than 1 cm/);
   });
 });

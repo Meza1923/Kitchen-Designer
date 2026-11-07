@@ -17,7 +17,7 @@ Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 g
 | 7 | Shelves: open wall shelf, shelves inside cabinets, open cabinets | Small–Medium | Done (to test in the app) |
 | 8 | Hebrew and English interface | Large | Planned |
 | 9 | Islands: two-sided, seating overhang, front marker | Medium–Large | Planned |
-| 10 | Connect walls: corner dragging and partition walls (T-joints) | Medium–Large | Planned (starts after #6 is merged) |
+| 10 | Connect walls: corner dragging and partition walls (T-joints) | Medium–Large | Phase A Done; phase B Planned |
 
 ## Details
 
@@ -272,6 +272,26 @@ Each phase gets its own handoff for review.
 - In the plan, grab a corner of the room and drag it. The two walls meeting there move along their normals (two `moveWall` steps), so corners stay at 90° and the room stays closed.
 - It works like wall dragging: 5 cm steps (Shift = 1 cm), the view stays still, cabinets on the walls keep their physical place, and a whole drag is one undo step.
 
+**Phase A handoff (2026-11-07, branch `feat/10-connect-walls`):**
+- **What changed:**
+  - `lib/roomShape.ts`: `dragCorner(data, corner, intoPrev, intoNext)`. It moves the wall ending at the corner and the wall starting there along their normals. It is two `moveWall` steps through a shared `moveSegment` helper, which `dragWall` now uses too, so open (removed) walls can move as well.
+  - `PlanDrawing`: a small blue-outlined handle in the 10 × 10 cm square outside every room corner, where the two wall bands meet. It doesn't cover cabinets standing in the corner.
+  - `PlanCanvas`: a `corner` drag kind that shares the wall-drag code (start snapshot, snapping, pan compensation, frozen fit, one undo key). The plan hint now says "drag walls, corners and items".
+- **How to check:**
+  - In the plan, drag a corner handle (cursor `move`). Both walls follow and the wall lengths in the Room bar update.
+  - Dragging the north-west corner keeps the room still on screen.
+  - In an L or U, the inside corners move diagonally.
+  - One Cmd+Z undoes the whole drag.
+- **Checked:**
+  - 4 new unit tests (`outline.test.ts`: rectangle outward, north-west inward with an island, inside corner of an L, refusal).
+  - In the isolated app (Playwright MCP, ports 5199/8765):
+    - Rectangle south-east and north-west corners; the handle stays under the pointer.
+    - Undo restores the whole drag.
+    - The L-shape inside corner.
+- **Known limits:**
+  - A move that would make a wall shorter than 1 cm is refused as a whole, so the corner stops at the last valid spot instead of sliding along the still-valid direction.
+  - Handles are always shown, not only on hover.
+
 **Phase B: partition walls.**
 - A new run starting from a point on an existing wall and running into the room, at 90° to it, with a length and the usual 10 cm thickness.
 - It has two faces, each with its own elevation and cabinets.
@@ -322,3 +342,6 @@ Each phase gets its own handoff for review.
 - 2026-11-06: #6 phase 1b: review finding R11 fixed.
 - 2026-11-07: Restored the phase 1b notes above, which an earlier copy of this file had overwritten.
 - 2026-11-07: Owner confirmed #6 phases 1 and 1b in the app: Done, merged into `main`. Phase 2 (niches, column / pipe box element) stays Planned.
+- 2026-11-07: #10 phase A (corner dragging) started on `feat/10-connect-walls`.
+- 2026-11-07: #10 phase A (corner dragging) built and checked; In review on `feat/10-connect-walls`.
+- 2026-11-07: #10 phase A merged into `main` (owner approved). Phase B (partition walls) is next.
