@@ -82,7 +82,8 @@ export interface WallRun {
   id: string;
   name: string; // e.g., "Wall A", "Island"
   kind: 'wall' | 'island';
-  side?: WallSide; // walls only
+  side?: WallSide; // walls only: the compass side it faces
+  segment?: number; // walls only: index of its room-outline segment (missing: derived from `side`)
   removed?: boolean; // walls only: open side of the room (no wall, no items)
   widthCm: number; // run length; for walls derived from the room
   heightCm: number; // ceiling height, synced from the room
@@ -96,10 +97,17 @@ export interface WallRun {
   rotationDeg?: Rotation;
 }
 
+export interface PlanPoint {
+  x: number;
+  y: number;
+}
+
 export interface Room {
-  widthCm: number; // plan X extent (north / south walls)
-  depthCm: number; // plan Y extent (east / west walls)
+  widthCm: number; // plan X extent (bounding box of the outline)
+  depthCm: number; // plan Y extent (bounding box of the outline)
   heightCm: number; // ceiling
+  /** Corner points clockwise, 90° corners, bounding box from (0, 0). Missing: the widthCm × depthCm rectangle. */
+  outline?: PlanPoint[];
 }
 
 export interface ProjectData {

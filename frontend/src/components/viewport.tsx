@@ -91,8 +91,11 @@ export function useViewport(size: { width: number; height: number }, fitKey: str
     return !!p && !p.moved;
   };
 
+  /** Move the view by (dx, dy) drawing px, e.g. to keep content still when the drawing's coordinates shift. */
+  const panBy = (dx: number, dy: number) => setVb((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+
   const viewBox = `${vb.x} ${vb.y} ${vb.w} ${vb.h}`;
-  return { svgRef, wrapRef, viewBox, zoom, fit, zoomAt, toSvg, startPan, movePan, endPan };
+  return { svgRef, wrapRef, viewBox, zoom, fit, zoomAt, toSvg, startPan, movePan, endPan, panBy };
 }
 
 export function ZoomControls({

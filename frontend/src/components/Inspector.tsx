@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Copy, Lock, Plus, Trash2, Unlock, X } from 'lucide-react';
-import type { FridgeType, KitchenItem, TallZoneConfig, TallZoneType, WallRun } from '../types';
+import type { FridgeType, KitchenItem, Room, TallZoneConfig, TallZoneType, WallRun } from '../types';
+import { wallDirection } from '../lib/outline';
 import type { Violation } from '../lib/rules';
 import { ProblemsList } from './ProblemsList';
 import {
@@ -12,7 +13,6 @@ import {
   defaultOpenShelves,
   FRIDGE_WIDTHS,
   makeZone,
-  SIDE_LABELS,
   SOCKET_HEIGHT_PRESETS,
   socketName,
   socketWidth,
@@ -331,6 +331,7 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
 interface Props {
   wall: WallRun;
   walls: WallRun[];
+  room: Room;
   item: KitchenItem;
   onChange: (patch: Partial<KitchenItem>) => void;
   onMoveToWall: (wallId: string) => void;
@@ -344,6 +345,7 @@ interface Props {
 export function Inspector({
   wall,
   walls,
+  room,
   item,
   onChange,
   onMoveToWall,
@@ -385,7 +387,7 @@ export function Inspector({
               .filter((w) => !w.removed && (!isWallOnly(item.category) || w.kind === 'wall'))
               .map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.name} · {w.kind === 'wall' ? SIDE_LABELS[w.side ?? 'north'] : 'Island'}
+                  {w.name} · {w.kind === 'wall' ? wallDirection(room, w) : 'Island'}
                 </option>
               ))}
           </select>

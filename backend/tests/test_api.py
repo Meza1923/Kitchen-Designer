@@ -116,3 +116,33 @@ def test_generated_openapi_is_up_to_date():
         "Schema changed: from backend/ run `.venv/bin/python -m app.export_openapi "
         "../frontend/src/generated/openapi.json`, then `npm run gen:api` in frontend/"
     )
+
+
+def test_room_outline_round_trip(client):
+    """Feature #6: an L-shaped outline and each wall's segment survive save and load."""
+    outline = [
+        {"x": 0, "y": 0},
+        {"x": 400, "y": 0},
+        {"x": 400, "y": 150},
+        {"x": 250, "y": 150},
+        {"x": 250, "y": 300},
+        {"x": 0, "y": 300},
+    ]
+    data = {
+        "room": {"widthCm": 400, "depthCm": 300, "heightCm": 260, "outline": outline},
+        "walls": [{"id": f"w{i}", "name": f"Wall {chr(65 + i)}", "segment": i, "items": []} for i in range(6)],
+        "activeWallId": "w0",
+    }
+    pid = client.post("/api/projects", json={"name": "L", "data": data}).json()["id"]
+    loaded = client.get(f"/api/projects/{pid}").json()["data"]
+    assert loaded["room"]["outline"] == [{"x": float(p["x"]), "y": float(p["y"])} for p in outline]
+    assert [w["segment"] for w in loaded["walls"]] == list(range(6))
+
+
+def test_room_outline_needs_four_corners(client):
+    data = {
+        "room": {"outline": [{"x": 0, "y": 0}, {"x": 1, "y": 0}, {"x": 1, "y": 1}]},
+        "walls": [],
+        "activeWallId": "",
+    }
+    assert client.post("/api/projects", json={"name": "bad", "data": data}).status_code == 422

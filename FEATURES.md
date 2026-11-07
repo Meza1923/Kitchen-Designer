@@ -4,7 +4,7 @@ Every feature, past and future. Status values: `Planned` · `In progress` · `In
 
 **How it's kept:** the developer (Claude) adds every new feature request as the next row before building it, with a section under Details (What, Done when, Decided) and a dated change-log line. When the work is ready, the status moves to `In review` with a handoff note (branch, what changed, how to check it). The reviewer (Gemini) then reviews it and logs findings in `ISSUES.md`. The feature becomes `Done` once the findings are resolved and the owner accepts it. Open design questions go to `ISSUES.md` → Open questions, not here.
 
-Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 goes first; corner rules use a run-end helper that #6 later extends to any room outline. The filler element (#4) doesn't depend on #6 and was built early; only its corner-aware part waits for #6.
+Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 goes first; corner rules use a run-end helper that #6 later extends to any room outline. The filler element (#4) doesn't depend on #6 and was built early; only its corner-aware part waits for #6.V
 
 | # | Feature | Size | Status |
 |---|---|---|---|
@@ -13,10 +13,11 @@ Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 g
 | 3 | More realistic water bar and coffee machine | Small | Done (to test in the app) |
 | 4 | Corner fillers | Medium | Done: filler element plus one-click fillers where rules need them |
 | 5 | Design rules: problems framed in the plan and elevation (19 rules) | Large | In progress: phases A and B done, phase C next |
-| 6 | Room shapes beyond a rectangle (any outline, 90° corners) | Large | Planned |
+| 6 | Room shapes beyond a rectangle (any outline, 90° corners) | Large | Phase 1 + 1b Done; phase 2 Planned |
 | 7 | Shelves: open wall shelf, shelves inside cabinets, open cabinets | Small–Medium | Done (to test in the app) |
 | 8 | Hebrew and English interface | Large | Planned |
 | 9 | Islands: two-sided, seating overhang, front marker | Medium–Large | Planned |
+| 10 | Connect walls: corner dragging and partition walls (T-joints) | Medium–Large | Planned (starts after #6 is merged) |
 
 ## Details
 
@@ -151,7 +152,66 @@ Notes and limits:
 
 **Decided:** Any room outline with 90° corners. This includes L- and U-shaped rooms and columns or niches. Angled walls are out of scope for now.
 
-**Open questions:** Q1–Q3 in `ISSUES.md` (how shapes are created, columns and niches, wall names). Building starts once they're decided.
+**Decided (Q1–Q3, 2026-11-06; PROJECT.md decision 12):**
+- **Shapes:** presets (Rectangle / L / U), plus a wall list where the last horizontal and last vertical wall close the outline automatically. Corner dragging comes later.
+- **Columns and pipe boxes:** a wall element.
+- **Niches:** part of the outline.
+- **Wall names:** a letter plus a numbered compass direction ("Wall E · North 2").
+
+**Added by the owner, 2026-11-06 (phase 1b, same branch):**
+- **Drag walls in the plan:** pull a wall in or out (5 cm steps, Shift = 1 cm); its two neighbours follow and the room stays closed. Cabinets on the neighbouring walls keep their physical position.
+- **One settings bar:** room shape, every wall's length (rectangles too: A and B editable, C and D automatic, replacing Width / Depth) and the ceiling, in one row.
+
+**Build plan, on branch `feat/6-room-shapes`:**
+- **Phase 1:** the outline model; walls, plan, 3D and rules for any outline; migration; presets and the wall list; wall names.
+- **Phase 2:** niches and the column / pipe box element.
+
+Each phase gets its own handoff for review.
+
+#### Handoff: phase 1, branch `feat/6-room-shapes` (2026-11-06)
+
+**What changed:**
+- **Model:** `Room.outline` (corner points, clockwise) and `WallRun.segment` (which outline segment a wall sits on), on both frontend and backend. Old projects get their rectangle as an explicit outline when loaded, and look the same.
+- **Geometry:** new `lib/outline.ts`. Walls take their frame from their segment.
+  - `runEnds` knows **inside** and **outside** corners. Outside corners are the tip of an L; the corner rules (R1, R2, R14, R18) only act at inside corners.
+  - "Island outside the room" uses the real outline.
+  - Wall lengths come from the outline.
+- **Shape editing:** new `lib/roomShape.ts`.
+  - **Room shape** chips in the settings bar: Rectangle, L-shape, U-shape.
+  - Rectangles keep their Width and Depth fields. Other shapes get a **Walls** row with a length per wall, where the last horizontal and last vertical wall are computed ("auto") so the room always closes.
+  - When switching shape, walls and their cabinets move to the **matching** new wall: same direction, same line. Walls that disappear are listed in a confirmation if they hold cabinets.
+  - Default names are re-lettered in outline order; renamed walls keep their name.
+- **Names (Q3):** a numbered direction on tabs, plan labels, the Inspector's wall list and the export: "Wall C · South 1".
+- **Plan:** each wall is a mitred band, with clean joins at inside and outside corners. Non-rectangular rooms show each wall's length in its label, and the area outside the room is tinted.
+- **3D:** the floor follows the outline. A wall extends over the corner block at an inside corner and stops short at an outside corner.
+
+**How to check in the app:**
+1. Add a base cabinet to Wall A, then click **L-shape**: six tabs appear (A North … F West) and the cabinet stays on Wall A.
+2. In the **Walls** row, set A · North to 450 and press Enter: E · South 2 ("auto") follows to 300.
+3. Open 3D: the floor is L-shaped.
+4. Switch back to **Rectangle**: if the inner walls C and D hold cabinets, you're asked first.
+
+**Checked:**
+- All checks pass: 141 frontend tests (16 new in `lib/outline.test.ts`), typecheck, lint (0 errors), format, build, 11 backend tests (2 new: outline save/load, and fewer than 4 corners refused), Ruff.
+- Checked **in the running app** with the Playwright MCP tools, against the isolated copy: L-shape switch, tabs and walls row, resizing Wall A to 450, the 3D floor. No console errors.
+- All 123 earlier tests (rules, fixes, placement, geometry) pass unchanged, so rectangles behave exactly as before.
+
+**Review round 1 (R8–R10):** all fixed: the aisle and work-triangle rules respect the room's walls, islands are placed and kept inside L and U rooms, and three small UI fixes. 146 frontend tests pass, plus all other checks; the island placement was checked in the running app.
+
+**Phase 1b (owner request, same branch):**
+- **Drag walls in the plan:** grab a wall (the cursor shows ↕ / ↔) and pull it in or out, in 5 cm steps (Shift = 1 cm).
+  - Its two neighbours follow and the room stays closed. Impossible moves stop at the last valid position.
+  - Cabinets on the neighbouring wall keep their physical position; cabinets pushed past a wall's start move forward in order instead of piling up (review finding R11). Islands keep their place.
+  - Dragging the top or left wall moves the room's coordinates; the view compensates, so the wall stays under the cursor. The view doesn't re-fit during or after a drag. A whole drag is one undo step.
+  - Built from `moveWall` (`lib/outline.ts`), `dragWall` (`lib/roomShape.ts`), `fitFromStart` (`lib/plan.ts`), a `wall` drag in `PlanCanvas`, and `panBy` in the viewport.
+- **One settings bar:** the Room row holds the shape, every wall's length and the ceiling. Rectangles show their walls too (A and B editable, C and D automatic), replacing Width / Depth.
+- **Checked in the running app** (Playwright, isolated copy): wall C outward (B 150 → 195, D 150 → 105); wall A down 50 px (moved 51 px with the cursor). No console errors. 151 frontend tests pass.
+
+**Known limits:**
+- **Phase 2 is not done:** niches, and the column / pipe box element.
+- Dragging corners in the plan comes later (Q1).
+- Presets start from the room's current width and depth with fixed proportions (the L's cut-out is ⅜ of the width and ½ of the depth). Adjust them in the Walls row.
+- Rectangles now show a thin diagonal seam where two walls meet in the plan (mitred corners).
 
 **Developer defaults (recorded as Implementation Assumptions when built):**
 - **Storage:** the room outline is stored as its corner points, clockwise, with walls derived from it.
@@ -202,6 +262,35 @@ Notes and limits:
 - **Seating overhang:** a countertop overhang with stools on one side, plus its support rule (R13: an overhang over 30 cm needs support).
 - **Front marker:** the plan shows which side the cabinets face (UI review finding #21).
 
+### 10. Connect walls by their ends
+
+**What (owner, 2026-11-07):** connect walls together, both from the ends of each wall and from the end of one wall to another wall.
+
+**Decided (Q4, 2026-11-07; PROJECT.md decision 13):** corner dragging plus partition walls. No free wall drawing.
+
+**Phase A: corner dragging.**
+- In the plan, grab a corner of the room and drag it. The two walls meeting there move along their normals (two `moveWall` steps), so corners stay at 90° and the room stays closed.
+- It works like wall dragging: 5 cm steps (Shift = 1 cm), the view stays still, cabinets on the walls keep their physical place, and a whole drag is one undo step.
+
+**Phase B: partition walls.**
+- A new run starting from a point on an existing wall and running into the room, at 90° to it, with a length and the usual 10 cm thickness.
+- It has two faces, each with its own elevation and cabinets.
+- **On the host wall:** its thickness blocks that stretch, like an element, so nothing can be placed through it.
+- **Corners:** both faces start at an inside corner with the host wall, so the corner rules (R1, R2, R14, R18) and the filler fixes work there.
+- **Its far end is open.**
+- **Views:** plan, 3D, rules, export and save/load all handle it.
+
+**Done when:**
+- A corner can be dragged in the plan, and the room stays closed with 90° corners.
+- A partition can be added on a wall, moved along it, resized, and given cabinets on both faces.
+- The corner rules work at its T-joint.
+- Old projects load unchanged.
+- Tests cover both phases.
+
+**Notes:**
+- The partition's two faces are the same "two-sided run" idea as the two-sided island in #9; build it once and reuse it there.
+- Its footprint on the host wall works like the column / pipe box element in #6 phase 2.
+
 ## Change log
 
 - 2026-10-27: File created.
@@ -223,3 +312,13 @@ Notes and limits:
 - 2026-11-06: Added the `In review` status and the intake/handoff process (developer Claude, reviewer Gemini).
 - 2026-11-06: #7 review findings R1–R4 fixed on `fix/13-15-placement`: floating shelf, walls only, socket check, gaps per height band, shelves control in 3D.
 - 2026-11-06: #6 scoped; Q1–Q3 asked in `ISSUES.md`; developer defaults listed.
+- 2026-11-06: #6 decisions applied, split into phase 1 (outline, presets, wall list, names) and phase 2 (niches, column/box element). Branch `feat/6-room-shapes`.
+- 2026-11-06: #6 phase 1 implemented and set to In review (handoff in its details).
+- 2026-11-06: #6 phase 1: review findings R8–R10 fixed.
+- 2026-11-07: #10 added (connect walls by their ends); Q4 asked.
+- 2026-11-07: Q4 applied to #10 (corner dragging + partition walls); plan and Done-when written.
+- 2026-11-06: Owner added wall dragging in the plan and one settings bar (phase 1b), on the same branch.
+- 2026-11-06: #6 phase 1b implemented and set to In review with phase 1.
+- 2026-11-06: #6 phase 1b: review finding R11 fixed.
+- 2026-11-07: Restored the phase 1b notes above, which an earlier copy of this file had overwritten.
+- 2026-11-07: Owner confirmed #6 phases 1 and 1b in the app: Done, merged into `main`. Phase 2 (niches, column / pipe box element) stays Planned.

@@ -66,6 +66,7 @@ class WallRun(BaseModel):
     name: str
     kind: Literal["wall", "island"] = "wall"
     side: Optional[Literal["north", "east", "south", "west"]] = None
+    segment: Optional[int] = Field(default=None, ge=0)  # walls only: index of its room-outline segment
     removed: Optional[bool] = None  # walls only: open side of the room
     widthCm: float = 400
     heightCm: float = 260
@@ -78,10 +79,17 @@ class WallRun(BaseModel):
     rotationDeg: Optional[Literal[0, 90, 180, 270]] = None
 
 
+class PlanPoint(BaseModel):
+    x: float
+    y: float
+
+
 class Room(BaseModel):
     widthCm: float = 400
     depthCm: float = 300
     heightCm: float = 260
+    # Corner points, clockwise, 90° corners (feature #6). Missing means the widthCm × depthCm rectangle.
+    outline: Optional[list[PlanPoint]] = Field(default=None, min_length=4)
 
 
 class ProjectData(BaseModel):

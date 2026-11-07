@@ -253,7 +253,7 @@ Clicking any element on the canvas selects it (highlighting its outline in blue)
    - A continuous drag, or continuous typing into one field, is grouped into a single undo step (same-key edits within 1s coalesce).
    - Switching the active wall tab is not an undo step. History holds 100 steps and is cleared on New / Load / Import.
 
-4. **Primary view is the top-down Plan; the per-wall Elevation is the "horizontal view".** The room is a **rectangle** (4 fixed walls + free islands). Items are **editable in both views**, which stay in sync because they edit the same data. In the plan, upper cabinets are **dashed outlines** and windows are glazed gaps in the wall.
+4. **Primary view is the top-down Plan; the per-wall Elevation is the "horizontal view".** The room is a **rectangle** (4 fixed walls + free islands); superseded for the room shape by decision 12. Items are **editable in both views**, which stay in sync because they edit the same data. In the plan, upper cabinets are **dashed outlines** and windows are glazed gaps in the wall.
 
 5. **Remove wall = open side.** Any of the 4 walls can be removed (with confirmation): it gets `removed: true`, its items are deleted, its tab disappears, the plan draws a dashed "OPEN · Wall X" edge instead of a wall, and it is excluded from exports. A **Restore Wall X** button brings it back (empty). The last remaining run cannot be removed.
 6. **Water bar** = a water dispenser standing on the countertop (`water_bar`, default 30×45, depth 40). Counter layer: `y` follows the countertop, and it collides with other counter items.
@@ -281,6 +281,15 @@ Clicking any element on the canvas selects it (highlighting its outline in blue)
     - **Rendering:** the elevation shows the plate, outlets and "h <centre>" label; the plan a small plate on the wall face labelled S1–S4 / 16A; 3D plates on the wall.
     - **Print/PDF:** an **Electrical Schedule** page after the floor plan lists every socket (wall, label, type, X centre, height centre, ⚠ note) with totals per type and the number of regular outlets.
 
+12. **Room shapes** (feature #6, owner decisions Q1–Q3, 2026-11-06). The room can be any outline with 90° corners: L- and U-shaped rooms, and niches. Angled walls are out of scope.
+    - **Creating and changing the shape:** presets (Rectangle, L-shape, U-shape), plus an editable wall list with a length per wall. The outline always stays closed: the last horizontal and the last vertical wall are computed from the others. Owner, 2026-11-06: walls can also be **dragged in the plan**, pulling a wall in or out while its neighbours follow, and the shape, every wall's length and the ceiling live in **one** settings bar.
+    - **Columns, pipe boxes, niches:** a niche is part of the room outline (a recess with its own short walls). Columns and pipe boxes are a wall element with configurable width, depth, Y and height; the wall stays one continuous run.
+    - **Wall names:** a letter plus a compass direction on every wall, numbered when a direction repeats (an L-shaped room has "North 1" and "North 2"). A rectangle keeps "Wall A · North" … "Wall D · West" as today.
+
+13. **Connecting walls** (feature #10, owner decision Q4, 2026-11-07): corner dragging plus partition walls. Free wall drawing is not part of it.
+    - **Corner dragging:** grab a corner where two walls meet and drag it. Both walls move along their normals, so every corner stays at 90° and the room stays closed.
+    - **Partition walls:** a separate wall starting from a point on an existing wall (a T-joint) and running into the room, for example a half-wall or a wall between kitchen and pantry, with cabinets on either side. Where it meets the host wall, its thickness blocks that stretch of the host wall, and cabinets right against it count as standing in a corner for the corner rules (R1, R2, R14, R18).
+
 ### Implementation Assumptions (in effect unless changed)
 - `sink`/`stove` form their own "counter layer": they only check overlaps against each other, and snap to each other and to countertop-bearing unit edges.
 - A `washing_machine` gets a countertop only when countertop-bearing units touch it on both sides. Adjacent base units with different heights produce separate countertop slabs.
@@ -293,4 +302,5 @@ Clicking any element on the canvas selects it (highlighting its outline in blue)
 - Room Width / Depth / Ceiling apply on Enter or leaving the field, not while typing. When a wall gets shorter, its units move back in order, only as far as needed (counter items move with their cabinet). Islands that still fit are moved back inside the room. If the change would make elements overlap or push an island out, the user confirms first (2026-11-06, issue #14).
 - Fillers added by a fix (R1/R2) take the height, depth and plinth of the unit they serve. A filler carries the countertop only when it touches a countertop-bearing base unit that isn't lower than the filler (2026-11-06, issue #15).
 - Open wall shelf (`shelf`): a floating board on concealed fixings (nothing drawn outside its outline), walls only like openings and sockets (`isWallOnly`), and a shelf over a socket hides it. Upper-layer gap warnings compare an item only with neighbours that overlap it in height. Switching a cabinet between Doors and Open keeps its internal shelves (2026-11-06, review findings R1–R4).
+- Room outline (#6): stored as corner points, clockwise, with the bounding box from (0, 0). Each wall stores its outline `segment`. Projects without an outline are rectangles and get one when loaded. At an outside corner (the tip of an L), a run's end counts as open, so the corner rules (R1, R2, R14, R18) don't act there. When switching shape, walls are matched to the new outline by direction and line (cabinets travel with their wall); walls with no match are removed after a confirmation if they hold cabinets. The active preset is read from the number of corners (4 / 6 / 8) (2026-11-06).
 - Arrow keys nudge the selection 1cm (`Shift` = 10cm, ↑/↓ only for upper-layer items); `Esc` deselects.

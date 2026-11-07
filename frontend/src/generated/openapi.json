@@ -278,6 +278,24 @@
         "title": "KitchenItem",
         "type": "object"
       },
+      "PlanPoint": {
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "PlanPoint",
+        "type": "object"
+      },
       "ProjectCreate": {
         "properties": {
           "data": {
@@ -464,6 +482,21 @@
             "title": "Heightcm",
             "type": "number"
           },
+          "outline": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PlanPoint"
+                },
+                "minItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outline"
+          },
           "widthCm": {
             "default": 400,
             "title": "Widthcm",
@@ -645,6 +678,18 @@
             ],
             "title": "Rotationdeg"
           },
+          "segment": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment"
+          },
           "side": {
             "anyOf": [
               {
@@ -771,6 +816,18 @@
               }
             ],
             "title": "Rotationdeg"
+          },
+          "segment": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment"
           },
           "side": {
             "anyOf": [

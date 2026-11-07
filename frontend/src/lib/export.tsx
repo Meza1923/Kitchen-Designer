@@ -5,6 +5,7 @@ import { computeCountertops, computeSocketIssues, fmt, isElectrical } from './ge
 import { Drawing, drawingSize } from '../components/Drawing';
 import { PlanDrawing, planSize } from '../components/PlanDrawing';
 import { checkProject, runViolations, type Violation } from './rules';
+import { wallDirection } from './outline';
 
 const EXPORT_SCALE = 2;
 
@@ -127,7 +128,10 @@ function runSummaryRows(data: ProjectData): ScheduleRow[] {
   return data.walls.map((w, i) => ({
     no: String(i + 1),
     label: w.name,
-    type: w.kind === 'wall' ? `Wall · ${w.side}${w.removed ? ' (open side)' : ''}` : `Island · ${w.rotationDeg ?? 0}°`,
+    type:
+      w.kind === 'wall'
+        ? `Wall · ${wallDirection(data.room, w)}${w.removed ? ' (open side)' : ''}`
+        : `Island · ${w.rotationDeg ?? 0}°`,
     x: w.kind === 'island' ? fmt(w.planX ?? 0) : '',
     y: w.kind === 'island' ? fmt(w.planY ?? 0) : '',
     size:

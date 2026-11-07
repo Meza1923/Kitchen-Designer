@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { KitchenItem, ProjectData, WallRun, WallSide } from '../types';
 import { createIsland, createItem, createRoomWalls, DEFAULT_ROOM } from './defaults';
 import { migrateProjectData } from './migrate';
+import { rectOutline } from './outline';
 import { computePlanConflicts, islandRect, itemPlanRect, planPointToWallX, syncRoom, toPlan, wallFrame } from './plan';
 
 const room = { ...DEFAULT_ROOM }; // 400 × 300 × 260
@@ -126,7 +127,9 @@ describe('migrateProjectData', () => {
 
     const migrated = migrateProjectData({ walls, activeWallId: 'e' });
 
-    expect(migrated.room).toEqual({ widthCm: 380, depthCm: 280, heightCm: 250 });
+    // Older projects get the rectangle as an explicit outline (feature #6), nothing else changes.
+    expect(migrated.room).toEqual({ widthCm: 380, depthCm: 280, heightCm: 250, outline: rectOutline(380, 280) });
+    expect(migrated.walls.slice(0, 4).map((w) => w.segment)).toEqual([0, 1, 2, 3]);
     expect(migrated.walls.map((w) => [w.id, w.kind, w.side])).toEqual([
       ['a', 'wall', 'north'],
       ['b', 'wall', 'east'],
@@ -138,8 +141,10 @@ describe('migrateProjectData', () => {
     expect(migrated.activeWallId).toBe('e');
   });
 
-  it('leaves current-format data intact', () => {
+  it('leaves current-format data intact, apart from the explicit rectangle outline', () => {
     const data = project((walls) => wallOn(walls, 'north').items.push(item('base_cabinet', { x: 10 })));
-    expect(migrateProjectData(data)).toEqual(data);
+    const migrated = migrateProjectData(data);
+    expect(migrated).toEqual({ ...data, room: { ...data.room, outline: rectOutline(400, 300) } });
+    expect(migrateProjectData(migrated)).toEqual(migrated); // migrating twice changes nothing
   });
 });

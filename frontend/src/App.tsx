@@ -33,6 +33,8 @@ import {
 import { api } from './lib/api';
 import { migrateProjectData } from './lib/migrate';
 import { roomChangeWarnings, syncRoom } from './lib/plan';
+import { presetOutline, type ShapePreset } from './lib/outline';
+import { reshapeRoom, resizeWall } from './lib/roomShape';
 import { exportJson, exportPng, importJson, printPdf, scheduleRows } from './lib/export';
 import { applyAllFixes, checkProject, type Violation } from './lib/rules';
 import { ProblemsList } from './components/ProblemsList';
@@ -246,12 +248,31 @@ export default function App() {
    * Room size changes are applied on Enter / leaving the field. When the new size makes elements overlap or leaves an
    * island outside the room, the user confirms first; cancelling keeps the old size.
    */
-  const updateRoom = (patch: Partial<Room>) => {
-    const next = syncRoom({ ...data, room: { ...data.room, ...patch } });
-    const warnings = roomChangeWarnings(data, next);
-    if (warnings.length && !confirm(`${warnings.join('\n')}\n\nApply the new room size anyway? (Undo brings it back.)`))
-      return;
-    setData(() => next, { key: `room:${Object.keys(patch).join(',')}` });
+  const updateRoom = (patch: Partial<Room>) =>
+    applyRoomChange(syncRoom({ ...data, room: { ...data.room, ...patch } }), `room:${Object.keys(patch).join(',')}`);
+
+  /** Apply a room change, confirming first when it removes cabinets, makes elements overlap or pushes an island out. */
+  const applyRoomChange = (next: ProjectData, key: string, losses: string[] = []): boolean => {
+    const warnings = [...losses, ...roomChangeWarnings(data, next)];
+    if (warnings.length && !confirm(`${warnings.join('\n')}\n\nApply the change anyway? (Undo brings it back.)`))
+      return false;
+    setData(() => next, { key });
+    return true;
+  };
+
+  const setRoomShape = (preset: ShapePreset) => {
+    const { data: next, dropped } = reshapeRoom(data, presetOutline(preset, data.room.widthCm, data.room.depthCm));
+    const losses = dropped
+      .filter((w) => w.items.length)
+      .map((w) => `${w.name} is removed together with its ${w.items.length} element(s).`);
+    if (applyRoomChange(next, 'room:shape', losses)) setSelectedId(null);
+  };
+
+  const resizeRoomWall = (wallId: string, lengthCm: number) => {
+    const next = resizeWall(data, wallId, lengthCm);
+    const name = data.walls.find((w) => w.id === wallId)?.name ?? 'This wall';
+    if (typeof next === 'string') notify('error', `Can't make ${name} ${fmt(lengthCm)} cm: ${next}.`);
+    else applyRoomChange(next, `room:wall:${wallId}`);
   };
 
   /** Free spot for a new element; when there is none, the widest gap, with a message saying it overlaps. */
@@ -292,7 +313,7 @@ export default function App() {
 
   const addItem = (category: ElementCategory, overrides: Partial<KitchenItem> = {}) => {
     if (isWallOnly(category) && wall.kind !== 'wall') {
-      notify('error', 'Doors, windows, sockets and open wall shelves go on a wall: select Wall A–D first.');
+      notify('error', 'Doors, windows, sockets and open wall shelves go on a wall: select a wall tab first.');
       return;
     }
     const item = { ...createItem(category), ...overrides };
@@ -536,6 +557,8 @@ export default function App() {
           onUpdateRun={(patch) =>
             updateWall(wall.id, (w) => ({ ...w, ...patch }), `run:${wall.id}:${Object.keys(patch).join(',')}`)
           }
+          onSetShape={setRoomShape}
+          onResizeWall={resizeRoomWall}
         />
       )}
 
@@ -580,6 +603,7 @@ export default function App() {
                 onActivate={(id) => selectInPlan(id, null)}
                 onMoveItem={(id, pos) => updateItem(id, pos)}
                 onMoveIsland={(id, pos) => updateWall(id, (w) => ({ ...w, ...pos }), `run:${id}:planX,planY`)}
+                onDragWall={(next) => setData(() => next, { key: 'room:wall-drag' })}
                 violations={violations}
               />
             </div>
@@ -611,6 +635,7 @@ export default function App() {
               key={selected.id}
               wall={wall}
               walls={data.walls}
+              room={data.room}
               item={selected}
               onChange={(patch) => updateItem(selected.id, patch)}
               onMoveToWall={(target) => moveItemToWall(selected.id, target)}

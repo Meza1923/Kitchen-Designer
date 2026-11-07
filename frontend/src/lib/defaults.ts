@@ -9,6 +9,7 @@ import type {
   WallRun,
   WallSide,
 } from '../types';
+import { nearestInside, rectInOutline, roomOutline, segments } from './outline';
 
 export const uid = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -157,16 +158,19 @@ export function createItem(category: ElementCategory): KitchenItem {
   return item;
 }
 
-const WALL_LETTERS = 'ABCD';
+/** Wall letters in outline order: A, B, … Z, then AA, AB, … */
+export const wallLetter = (i: number): string =>
+  i < 26 ? String.fromCharCode(65 + i) : wallLetter(Math.floor(i / 26) - 1) + wallLetter(i % 26);
 
-/** The four fixed room walls, A–D clockwise from north, sized from the room. */
+/** One wall per segment of the room outline, lettered clockwise from the first corner (a rectangle: A–D = N/E/S/W). */
 export function createRoomWalls(room: Room): WallRun[] {
-  return WALL_SIDES.map((side, i) => ({
+  return segments(roomOutline(room)).map((seg) => ({
     id: uid(),
-    name: `Wall ${WALL_LETTERS[i]}`,
+    name: `Wall ${wallLetter(seg.index)}`,
     kind: 'wall',
-    side,
-    widthCm: side === 'north' || side === 'south' ? room.widthCm : room.depthCm,
+    side: seg.side,
+    segment: seg.index,
+    widthCm: Math.round(seg.length * 10) / 10,
     heightCm: room.heightCm,
     countertopThicknessCm: 3,
     items: [],
@@ -186,11 +190,18 @@ export function createIsland(room: Room, existing: WallRun[]): WallRun {
     heightCm: room.heightCm,
     countertopThicknessCm: 3,
     items: [],
-    planX: Math.round((room.widthCm - widthCm) / 2),
-    planY: Math.round((room.depthCm - depthCm) / 2),
+    ...islandSpot(room, widthCm, depthCm),
     depthCm,
     rotationDeg: 0,
   };
+}
+
+/** Centred in the room; in an L or U room, the nearest spot to the centre that is actually inside it. */
+function islandSpot(room: Room, w: number, h: number): { planX: number; planY: number } {
+  const centre = { x: Math.round((room.widthCm - w) / 2), y: Math.round((room.depthCm - h) / 2) };
+  const outline = roomOutline(room);
+  const spot = rectInOutline(outline, { ...centre, w, h }) ? centre : (nearestInside(outline, w, h, centre) ?? centre);
+  return { planX: spot.x, planY: spot.y };
 }
 
 export function createProjectData(): ProjectData {

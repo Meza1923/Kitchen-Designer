@@ -8,11 +8,13 @@ import {
   localRect,
   toPlan,
   wallFrame,
+  runEnds,
   WALL_THICKNESS_CM,
   type Frame,
   type Pt,
   type Rect,
 } from './plan';
+import { roomOutline } from './outline';
 
 /**
  * Builds a shaded 3D model of the project. Units are cm; plan X → three X, plan Y → three Z, height → three Y.
@@ -659,12 +661,11 @@ function addItem(
 function addWall(b: Builder, root: THREE.Group, data: ProjectData, run: WallRun) {
   const f = wallFrame(data.room, run);
   const H = data.room.heightCm;
-  const present = (side: string) => data.walls.some((w) => w.kind === 'wall' && w.side === side && !w.removed);
-  // North/south walls own the corners (as in the plan), extended toward a neighbour that exists.
-  const startNeighbour = { north: 'west', south: 'east' }[run.side as 'north' | 'south'];
-  const endNeighbour = { north: 'east', south: 'west' }[run.side as 'north' | 'south'];
-  const start = startNeighbour && present(startNeighbour) ? -T : 0;
-  const end = f.length + (endNeighbour && present(endNeighbour) ? T : 0);
+  // Each wall owns the corner at its end: at an inside corner it extends over the corner block, at an outside corner
+  // (the tip of an L) it stops short so it doesn't overlap the next wall, which covers that corner.
+  const { end: endCorner } = runEnds(data, run);
+  const start = 0;
+  const end = f.length + (endCorner.kind === 'inside_corner' ? T : 0) - (endCorner.kind === 'outside_corner' ? T : 0);
 
   const group = new THREE.Group();
   const inner = toPlan(f, f.length / 2, 0);
@@ -743,9 +744,10 @@ export function buildKitchen(
   const root = new THREE.Group();
   const { room } = data;
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(room.widthCm, room.depthCm), b.mat(C.floor));
+  // Floor in the room's outline (plan Y is three Z; the shape is drawn in X / −Y and turned flat).
+  const shape = new THREE.Shape(roomOutline(room).map((p) => new THREE.Vector2(p.x, -p.y)));
+  const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), b.mat(C.floor));
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(room.widthCm / 2, 0, room.depthCm / 2);
   floor.receiveShadow = true;
   root.add(floor);
   const grid = new THREE.GridHelper(

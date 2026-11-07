@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pencil, Plus, RotateCcw, RotateCw, X } from 'lucide-react';
 import type { ProjectData, Room, Rotation, WallRun } from '../types';
-import { SIDE_LABELS } from '../lib/defaults';
-import { NumField } from './Inspector';
+import { closingWalls, directionLabels, roomOutline, segmentIndex, segments, type ShapePreset } from '../lib/outline';
+import { Chips, NumField } from './Inspector';
 
 interface Props {
   data: ProjectData;
@@ -14,7 +14,15 @@ interface Props {
   onRestoreWall: (id: string) => void;
   onUpdateRoom: (patch: Partial<Room>) => void;
   onUpdateRun: (patch: Partial<WallRun>) => void;
+  /** Switch the room to a preset outline (feature #6). */
+  onSetShape: (preset: ShapePreset) => void;
+  /** Set one wall's length; the room's closing walls follow. */
+  onResizeWall: (wallId: string, lengthCm: number) => void;
 }
+
+const SHAPES: Record<ShapePreset, string> = { rectangle: 'Rectangle', l_shape: 'L-shape', u_shape: 'U-shape' };
+/** Which preset an outline came from, by its number of corners (resizing keeps the count). */
+const shapeOf = (corners: number): ShapePreset => (corners === 6 ? 'l_shape' : corners === 8 ? 'u_shape' : 'rectangle');
 
 function TabName({ name, editing, onDone }: { name: string; editing: boolean; onDone: (name: string | null) => void }) {
   const [draft, setDraft] = useState(name);
@@ -58,9 +66,18 @@ export function WallBar({
   onRestoreWall,
   onUpdateRoom,
   onUpdateRun,
+  onSetShape,
+  onResizeWall,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const { room } = data;
+  const outline = roomOutline(room);
+  const directions = directionLabels(outline);
+  const direction = (w: WallRun) => directions[segmentIndex(w)] ?? '';
+  const shape = shapeOf(outline.length);
+  const closing = closingWalls(outline);
+  const segs = segments(outline);
+  const wallOn = new Map(data.walls.filter((w) => w.kind === 'wall').map((w) => [segmentIndex(w), w]));
   const walls = data.walls.filter((w) => !w.removed);
   const openSides = data.walls.filter((w) => w.removed);
   const active = walls.find((w) => w.id === data.activeWallId) ?? walls[0];
@@ -90,7 +107,7 @@ export function WallBar({
                 }}
               />
               <span className="font-mono text-[10px] font-normal uppercase text-slate-400">
-                {w.kind === 'wall' ? SIDE_LABELS[w.side ?? 'north'] : 'island'} · {w.items.length}
+                {w.kind === 'wall' ? direction(w) : 'island'} · {w.items.length}
               </span>
               {isActive && editingId !== w.id && (
                 <>
@@ -143,33 +160,45 @@ export function WallBar({
             title={`${w.name} is an open side`}
             onClick={() => onRestoreWall(w.id)}
           >
-            <RotateCcw size={13} /> Restore {w.name} · {SIDE_LABELS[w.side ?? 'north']}
+            <RotateCcw size={13} /> Restore {w.name} · {direction(w)}
           </button>
         ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-300 bg-slate-100 px-4 py-2">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-600">Room</span>
-        <Setting label="Width">
-          <NumField
-            className="w-24"
-            value={room.widthCm}
-            min={100}
-            max={2000}
-            commitOnBlur
-            onChange={(widthCm) => onUpdateRoom({ widthCm })}
-          />
-        </Setting>
-        <Setting label="Depth">
-          <NumField
-            className="w-24"
-            value={room.depthCm}
-            min={100}
-            max={2000}
-            commitOnBlur
-            onChange={(depthCm) => onUpdateRoom({ depthCm })}
-          />
-        </Setting>
+        <Chips
+          options={Object.keys(SHAPES) as ShapePreset[]}
+          value={shape}
+          onChange={(preset) => preset !== shape && onSetShape(preset)}
+          render={(v) => SHAPES[v]}
+        />
+        {segs.map((seg) => {
+          const w = wallOn.get(seg.index);
+          const auto = seg.index === closing.horizontal || seg.index === closing.vertical;
+          const label = `${w?.name.replace(/^Wall /, '') ?? '?'} · ${directions[seg.index]}`;
+          return (
+            <Setting key={seg.index} label={label}>
+              {auto ? (
+                <span
+                  className="w-24 rounded border border-dashed border-slate-300 px-2 py-1 font-mono text-sm text-slate-500"
+                  title="Computed from the other walls, so the room always closes"
+                >
+                  {Math.round(seg.length * 10) / 10} <span className="text-[10px]">auto</span>
+                </span>
+              ) : (
+                <NumField
+                  className="w-24"
+                  value={seg.length}
+                  min={1}
+                  max={2000}
+                  commitOnBlur
+                  onChange={(length) => w && onResizeWall(w.id, length)}
+                />
+              )}
+            </Setting>
+          );
+        })}
         <Setting label="Ceiling">
           <NumField
             className="w-24"

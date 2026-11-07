@@ -39,6 +39,7 @@ import {
   type Violation,
 } from './core';
 import { addScribeFiller, insertFiller } from './fixes';
+import { lineInOutline, rectInOutline, roomOutline } from '../outline';
 
 const CORNER_FILLER = 5; // R1
 const HINGE_GAP = [5, 10] as const; // R2
@@ -159,6 +160,7 @@ const R4: Rule = {
       const f = wallFrame(data.room, run);
       return floorUnits(run).map((item) => ({ run, f, item, rect: itemPlanRect(f, item) }));
     });
+    const outline = roomOutline(data.room);
     const out: Violation[] = [];
     const narrowest = new Map<string, { gap: number; p: Placed; q: Placed; area: Rect }>();
     for (const p of placed) {
@@ -180,6 +182,8 @@ const R4: Rule = {
         if (gap <= 0) continue;
         const lo = Math.min(pf, qf);
         const area = n.x !== 0 ? { x: lo, y: o0, w: gap, h: o1 - o0 } : { x: o0, y: lo, w: o1 - o0, h: gap };
+        // Runs facing each other across a wall (the notch of a U, the tip of an L) share no aisle.
+        if (!rectInOutline(outline, area)) continue;
         const reach = openReach(p.item) + openReach(q.item);
         if (reach > gap) {
           out.push(
@@ -543,6 +547,27 @@ const R17: Rule = {
     const [s, c, f] = best.pts;
     const items = best.pts.map((x) => ref(x.run, x.item));
     const out: Violation[] = [];
+    // A wall of the room cutting across a leg (an L or U room): the cook has to walk around it.
+    const outline = roomOutline(data.room);
+    const legs = [
+      [s, c, 'the sink and the cooktop'],
+      [c, f, 'the cooktop and the fridge'],
+      [f, s, 'the fridge and the sink'],
+    ] as const;
+    for (const [a, b, what] of legs) {
+      if (lineInOutline(outline, a.p, b.p)) continue;
+      out.push(
+        v(
+          'R17',
+          'warning',
+          'WALL IN THE WAY',
+          `A wall of the room stands between ${what}: the work triangle has to go around it.`,
+          {
+            items: [ref(a.run, a.item), ref(b.run, b.item)],
+          },
+        ),
+      );
+    }
     const names = ['sink ↔ cooktop', 'cooktop ↔ fridge', 'fridge ↔ sink'];
     const bad = best.legs.map((d, k) => ({ d, k })).filter(({ d }) => d < TRIANGLE[0] || d > TRIANGLE[1]);
     if (bad.length) {

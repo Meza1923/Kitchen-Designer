@@ -3,6 +3,7 @@ import type { KitchenItem, ProjectData, WallRun } from '../types';
 import type { Violation } from '../lib/rules';
 import { snapX } from '../lib/geometry';
 import { planPointToWallX, snapTo, wallFrame } from '../lib/plan';
+import { dragWall } from '../lib/roomShape';
 import { planOrigin, PlanDrawing, planSize } from './PlanDrawing';
 import { GridBackground, useShiftHeld, useViewport, ZoomControls } from './viewport';
 
@@ -11,6 +12,19 @@ const ISLAND_GRID_CM = 5;
 
 type Drag =
   | { kind: 'item'; runId: string; itemId: string; startX: number; startProj: number; moved: boolean }
+  | {
+      kind: 'wall';
+      runId: string;
+      /** The project when the drag started: every move is computed from it, so nothing drifts. */
+      start: ProjectData;
+      startPt: { x: number; y: number };
+      normal: { x: number; y: number };
+      /** How far the plan's coordinates have moved so far (the room's top-left stays at 0, 0). */
+      shift: { x: number; y: number };
+      /** Last snapped distance applied, to skip moves that don't change it. */
+      applied: number;
+      moved: boolean;
+    }
   | {
       kind: 'island';
       runId: string;
@@ -26,12 +40,32 @@ interface Props {
   onActivate: (runId: string) => void;
   onMoveItem: (itemId: string, pos: { x: number }) => void;
   onMoveIsland: (runId: string, pos: { planX: number; planY: number }) => void;
+  /** A wall dragged in the plan: the whole updated project (one undo step per drag). */
+  onDragWall: (next: ProjectData) => void;
   violations: Violation[];
 }
 
 /** Interactive top-down floor plan. Items slide along their wall; islands move freely. */
-export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem, onMoveIsland, violations }: Props) {
-  const vp = useViewport(planSize(data, PLAN_SCALE), `${data.room.widthCm}:${data.room.depthCm}`);
+export function PlanCanvas({
+  data,
+  selectedId,
+  onSelect,
+  onActivate,
+  onMoveItem,
+  onMoveIsland,
+  onDragWall,
+  violations,
+}: Props) {
+  // Re-fit when the room's size changes, but not while (or because) a wall is being dragged: the view stays put.
+  const dims = `${data.room.widthCm}:${data.room.depthCm}`;
+  const lastDims = useRef(dims);
+  const fitCount = useRef(0);
+  const draggingWall = useRef(false);
+  if (dims !== lastDims.current) {
+    lastDims.current = dims;
+    if (!draggingWall.current) fitCount.current++;
+  }
+  const vp = useViewport(planSize(data, PLAN_SCALE), String(fitCount.current));
   const shiftHeld = useShiftHeld();
   const drag = useRef<Drag | null>(null);
   const dataRef = useRef(data);
@@ -63,6 +97,20 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
     if (e.button !== 0) return;
     e.stopPropagation();
     onActivate(run.id);
+    if (run.kind === 'wall') {
+      vp.svgRef.current!.setPointerCapture(e.pointerId);
+      drag.current = {
+        kind: 'wall',
+        runId: run.id,
+        start: data,
+        startPt: toCm(e),
+        normal: wallFrame(data.room, run).n,
+        shift: { x: 0, y: 0 },
+        applied: 0,
+        moved: false,
+      };
+      return;
+    }
     if (run.kind !== 'island') return;
     vp.svgRef.current!.setPointerCapture(e.pointerId);
     drag.current = {
@@ -79,6 +127,24 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
     const d = drag.current;
     if (!d) return;
     const pt = toCm(e);
+    if (d.kind === 'wall') {
+      // Pointer in the drag's starting coordinates, then its distance along the wall's normal (into the room).
+      const raw = (pt.x + d.shift.x - d.startPt.x) * d.normal.x + (pt.y + d.shift.y - d.startPt.y) * d.normal.y;
+      if (!d.moved && Math.abs(raw) * PLAN_SCALE < 3) return;
+      d.moved = true;
+      draggingWall.current = true;
+      const delta = snapTo(raw, e.shiftKey ? 1 : ISLAND_GRID_CM);
+      if (delta === d.applied) return; // same snapped position: nothing to redo
+      const result = dragWall(d.start, d.runId, delta);
+      if (typeof result === 'string') return; // keep the last valid position
+      // Keep the room still on screen when its top-left (the plan's origin) moves.
+      // d.shift holds minus the previous shift, so this pans by (new shift − previous shift).
+      vp.panBy((result.shift.x + d.shift.x) * PLAN_SCALE, (result.shift.y + d.shift.y) * PLAN_SCALE);
+      d.shift = { x: -result.shift.x, y: -result.shift.y };
+      d.applied = delta;
+      onDragWall(result.data);
+      return;
+    }
     const current = dataRef.current;
     const run = current.walls.find((w) => w.id === d.runId);
     if (!run) return;
@@ -106,6 +172,7 @@ export function PlanCanvas({ data, selectedId, onSelect, onActivate, onMoveItem,
 
   const onPointerUp = (e: ReactPointerEvent) => {
     drag.current = null;
+    draggingWall.current = false;
     if (vp.endPan(e)) onSelect(dataRef.current.activeWallId, null);
     else if (vp.svgRef.current?.hasPointerCapture(e.pointerId)) vp.svgRef.current.releasePointerCapture(e.pointerId);
   };

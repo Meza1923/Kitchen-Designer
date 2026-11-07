@@ -1,5 +1,16 @@
 import type { KitchenItem, ProjectData, Room, WallRun } from '../types';
 import {
+  bounds,
+  cornerKind,
+  nearestInside,
+  rectInOutline,
+  rectOutline,
+  roomOutline,
+  segmentIndex,
+  segments,
+  type Pt,
+} from './outline';
+import {
   canCollide,
   computeCountertops,
   computeOverlaps,
@@ -11,11 +22,8 @@ import {
   type Countertop,
 } from './geometry';
 
-/** Plan coordinates: cm, X to the right (east), Y down (south), origin at the room's north-west inner corner. */
-export interface Pt {
-  x: number;
-  y: number;
-}
+/** Plan coordinates: cm, X to the right (east), Y down (south), origin at the top-left of the room's bounding box. */
+export type { Pt } from './outline';
 
 export interface Rect {
   x: number;
@@ -46,12 +54,14 @@ export function islandRect(run: WallRun): Rect {
 }
 
 export function wallFrame(room: Room, run: WallRun): Frame {
-  // Walls behave like an island whose footprint is the whole room, rotated per side.
+  if (run.kind === 'wall') {
+    // A wall is a segment of the room outline: x runs from its start (left as seen from inside) to its end.
+    const seg = segments(roomOutline(room))[segmentIndex(run)];
+    if (seg) return { origin: seg.p, u: seg.u, n: seg.n, length: seg.length };
+  }
+  // Islands (and a wall whose segment no longer exists): a footprint rotated by its rotation.
   const box: Rect = run.kind === 'island' ? islandRect(run) : { x: 0, y: 0, w: room.widthCm, h: room.depthCm };
-  const rotation =
-    run.kind === 'island'
-      ? (run.rotationDeg ?? 0)
-      : ({ north: 0, east: 90, south: 180, west: 270 } as const)[run.side ?? 'north'];
+  const rotation = run.kind === 'island' ? (run.rotationDeg ?? 0) : 0;
   const { x, y, w, h } = box;
   switch (rotation) {
     case 0:
@@ -147,11 +157,10 @@ export function computePlanConflicts(data: ProjectData): PlanConflict[] {
     }
   }
 
-  const roomRect = { x: 0, y: 0, w: data.room.widthCm, h: data.room.depthCm };
+  const outline = roomOutline(data.room);
   for (const run of data.walls.filter((w) => w.kind === 'island')) {
     const r = islandRect(run);
-    const inside = r.x >= -EPS && r.y >= -EPS && r.x + r.w <= roomRect.w + EPS && r.y + r.h <= roomRect.h + EPS;
-    if (!inside) conflicts.push({ a: run.id, rect: r, kind: 'outside' });
+    if (!rectInOutline(outline, r)) conflicts.push({ a: run.id, rect: r, kind: 'outside' });
   }
   return conflicts;
 }
@@ -180,24 +189,59 @@ function fitToLength(run: WallRun, length: number): WallRun {
   return { ...run, items: run.items.map((i) => (shift.has(i.id) ? { ...i, x: i.x + shift.get(i.id)! } : i)) };
 }
 
+/**
+ * The mirror of fitToLength, for units pushed past the START of a run (x < 0, e.g. when dragging the previous wall
+ * shortens this one from its start): walking from the start, each unit moves forward only as far as needed to clear
+ * the start and the units before it that it can collide with (order is kept; counter items move with their unit).
+ * Review finding R11.
+ */
+function fitFromStart(run: WallRun): WallRun {
+  const units = run.items.filter((i) => ['floor', 'upper'].includes(layerOf(i.category)));
+  if (!units.some((u) => u.x < 0)) return run;
+  const shift = new Map<string, number>();
+  const placed: { item: KitchenItem; x: number }[] = [];
+  for (const u of units.sort((a, b) => a.x - b.x)) {
+    const limit = Math.max(
+      0,
+      ...placed.filter((p) => p.item.x <= u.x && canCollide(u, p.item)).map((p) => p.x + p.item.width),
+    );
+    const x = Math.max(u.x, limit);
+    if (x !== u.x) shift.set(u.id, x - u.x);
+    placed.push({ item: u, x });
+  }
+  for (const [host, ids] of countersOnUnits(run))
+    for (const id of ids) if (shift.has(host)) shift.set(id, shift.get(host)!);
+  return { ...run, items: run.items.map((i) => (shift.has(i.id) ? { ...i, x: i.x + shift.get(i.id)! } : i)) };
+}
+
 /** Re-derive wall lengths and ceiling heights from the room, then re-normalize every run. Islands that fit are
  * kept inside the room. */
 export function syncRoom(data: ProjectData): ProjectData {
-  const { room } = data;
+  // A rectangle follows the Width / Depth fields; any other outline drives the bounding box instead.
+  const given = data.room.outline;
+  const outline = given && given.length > 4 ? given : rectOutline(data.room.widthCm, data.room.depthCm);
+  const box = bounds(outline);
+  const room: Room = { ...data.room, outline, widthCm: box.w, depthCm: box.h };
+  const segs = segments(outline);
   return {
     ...data,
+    room,
     walls: data.walls.map((w) => {
-      const widthCm =
-        w.kind === 'wall' ? (w.side === 'north' || w.side === 'south' ? room.widthCm : room.depthCm) : w.widthCm;
-      let run: WallRun = { ...fitToLength(w, widthCm), heightCm: room.heightCm, widthCm };
+      const seg = w.kind === 'wall' ? segs[segmentIndex(w)] : undefined;
+      const widthCm = seg ? round1(seg.length) : w.widthCm;
+      let run: WallRun = { ...fitToLength(fitFromStart(w), widthCm), heightCm: room.heightCm, widthCm };
+      if (seg) run = { ...run, segment: seg.index, side: seg.side };
       if (run.kind === 'island') {
         const r = islandRect(run);
         if (r.w <= room.widthCm && r.h <= room.depthCm) {
-          run = {
-            ...run,
-            planX: Math.min(Math.max(0, r.x), room.widthCm - r.w),
-            planY: Math.min(Math.max(0, r.y), room.depthCm - r.h),
-          };
+          let x = Math.min(Math.max(0, r.x), room.widthCm - r.w);
+          let y = Math.min(Math.max(0, r.y), room.depthCm - r.h);
+          // In an L or U room the bounding box isn't enough: move it to the nearest spot inside, if there is one.
+          if (!rectInOutline(outline, { x, y, w: r.w, h: r.h })) {
+            const spot = nearestInside(outline, r.w, r.h, { x, y });
+            if (spot) ({ x, y } = spot);
+          }
+          run = { ...run, planX: x, planY: y };
         }
       }
       return normalizeWall(run);
@@ -216,13 +260,12 @@ export function roomChangeWarnings(before: ProjectData, after: ProjectData): str
     const added = computeOverlaps(run).filter((o) => !was.has(`${o.a}|${o.b}`));
     if (added.length) {
       const n = new Set(added.flatMap((o) => [o.a, o.b])).size;
-      out.push(`${run.name} becomes ${round1(run.widthCm)} cm: ${n} of its elements no longer fit and will overlap.`);
+      out.push(`${old.name} becomes ${round1(run.widthCm)} cm: ${n} of its elements no longer fit and will overlap.`);
     }
     if (run.kind === 'island') {
-      const inside = (d: ProjectData, r: Rect) =>
-        r.x >= 0 && r.y >= 0 && r.x + r.w <= d.room.widthCm && r.y + r.h <= d.room.depthCm;
+      const inside = (d: ProjectData, r: Rect) => rectInOutline(roomOutline(d.room), r);
       if (inside(before, islandRect(old)) && !inside(after, islandRect(run)))
-        out.push(`${run.name} no longer fits in the room.`);
+        out.push(`${old.name} no longer fits in the room.`);
     }
   }
   return out;
@@ -236,6 +279,7 @@ export const snapTo = (v: number, step: number) => round1(Math.round(v / step) *
  */
 export type RunEnd =
   | { kind: 'inside_corner'; runId: string; neighbourId: string; neighbourEnd: 'start' | 'end' }
+  | { kind: 'outside_corner'; runId: string; neighbourId: string; neighbourEnd: 'start' | 'end' }
   | { kind: 'open'; runId: string };
 
 /**
@@ -245,15 +289,17 @@ export type RunEnd =
  */
 export function runEnds(data: ProjectData, run: WallRun): { start: RunEnd; end: RunEnd } {
   const open = { kind: 'open', runId: run.id } as const;
-  if (run.kind !== 'wall' || run.removed || !run.side) return { start: open, end: open };
-  const order = ['north', 'east', 'south', 'west'] as const;
-  const i = order.indexOf(run.side);
-  const wallOn = (side: (typeof order)[number]) =>
-    data.walls.find((w) => w.kind === 'wall' && w.side === side && !w.removed);
-  const prev = wallOn(order[(i + 3) % 4]);
-  const next = wallOn(order[(i + 1) % 4]);
+  if (run.kind !== 'wall' || run.removed) return { start: open, end: open };
+  const outline = roomOutline(data.room);
+  const n = outline.length;
+  const i = segmentIndex(run);
+  const wallOn = (seg: number) => data.walls.find((w) => w.kind === 'wall' && !w.removed && segmentIndex(w) === seg);
+  const prev = wallOn((i + n - 1) % n);
+  const next = wallOn((i + 1) % n);
+  // The corner at our start is the end of the previous segment; at our end, the end of ours.
+  const kindAt = (corner: number) => (cornerKind(outline, corner) === 'inside' ? 'inside_corner' : 'outside_corner');
   return {
-    start: prev ? { kind: 'inside_corner', runId: run.id, neighbourId: prev.id, neighbourEnd: 'end' } : open,
-    end: next ? { kind: 'inside_corner', runId: run.id, neighbourId: next.id, neighbourEnd: 'start' } : open,
+    start: prev ? { kind: kindAt((i + n - 1) % n), runId: run.id, neighbourId: prev.id, neighbourEnd: 'end' } : open,
+    end: next ? { kind: kindAt(i), runId: run.id, neighbourId: next.id, neighbourEnd: 'start' } : open,
   };
 }

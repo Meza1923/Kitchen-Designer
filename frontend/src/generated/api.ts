@@ -138,6 +138,13 @@ export interface components {
             /** Y */
             y: number;
         };
+        /** PlanPoint */
+        PlanPoint: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
         /** ProjectCreate */
         ProjectCreate: {
             data?: components["schemas"]["ProjectData-Input"] | null;
@@ -217,6 +224,8 @@ export interface components {
              * @default 260
              */
             heightCm: number;
+            /** Outline */
+            outline?: components["schemas"]["PlanPoint"][] | null;
             /**
              * Widthcm
              * @default 400
@@ -280,6 +289,8 @@ export interface components {
             removed?: boolean | null;
             /** Rotationdeg */
             rotationDeg?: (0 | 90 | 180 | 270) | null;
+            /** Segment */
+            segment?: number | null;
             /** Side */
             side?: ("north" | "east" | "south" | "west") | null;
             /**
@@ -322,6 +333,8 @@ export interface components {
             removed?: boolean | null;
             /** Rotationdeg */
             rotationDeg?: (0 | 90 | 180 | 270) | null;
+            /** Segment */
+            segment?: number | null;
             /** Side */
             side?: ("north" | "east" | "south" | "west") | null;
             /**

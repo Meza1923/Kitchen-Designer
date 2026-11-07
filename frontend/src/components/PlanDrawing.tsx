@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
-import { SIDE_LABELS } from '../lib/defaults';
+import { directionLabels, roomOutline, segmentIndex, segments, type Pt, type Segment } from '../lib/outline';
 import { computeGaps, fmt, isElectrical, isOpening, layerOf } from '../lib/geometry';
 import {
   countertopRects,
@@ -80,15 +80,32 @@ export function PlanDrawing({
   const shown = violations.filter((v) => v.severity !== 'info' && v.rule !== 'narrow_gap');
   const flagged = severityByItem(shown);
   const active = data.activeWallId;
-  const present = (side: string) => data.walls.some((w) => w.kind === 'wall' && w.side === side && !w.removed);
-  const [hasN, hasE, hasS, hasW] = ['north', 'east', 'south', 'west'].map(present);
-  // North/south bands own the corners; east/west extend into a corner only when its neighbour is open.
-  const wallBands = [
-    hasN && { x: hasW ? -t : 0, y: -t, width: W + (hasW ? t : 0) + (hasE ? t : 0), height: t },
-    hasS && { x: hasW ? -t : 0, y: D, width: W + (hasW ? t : 0) + (hasE ? t : 0), height: t },
-    hasE && { x: W, y: hasN ? 0 : -t, width: t, height: D + (hasN ? 0 : t) + (hasS ? 0 : t) },
-    hasW && { x: -t, y: hasN ? 0 : -t, width: t, height: D + (hasN ? 0 : t) + (hasS ? 0 : t) },
-  ].filter(Boolean) as { x: number; y: number; width: number; height: number }[];
+  // Room outline: one hatched band per wall, outside the room, mitred into its neighbours at both inside and
+  // outside corners (square ends next to a removed wall).
+  const outline = roomOutline(room);
+  const segs = segments(outline);
+  const directions = directionLabels(outline);
+  const wallOnSegment = new Map(
+    data.walls.filter((w) => w.kind === 'wall' && !w.removed).map((w) => [segmentIndex(w), w]),
+  );
+  const wallBands = segs
+    .filter((g) => wallOnSegment.has(g.index))
+    .map((g) => {
+      const prev = segs[(g.index + segs.length - 1) % segs.length];
+      const next = segs[(g.index + 1) % segs.length];
+      const out = (p: Pt, other: Segment | null) => ({
+        x: p.x - T * g.n.x - (other ? T * other.n.x : 0),
+        y: p.y - T * g.n.y - (other ? T * other.n.y : 0),
+      });
+      const pts = [
+        g.p,
+        g.q,
+        out(g.q, wallOnSegment.has(next.index) ? next : null),
+        out(g.p, wallOnSegment.has(prev.index) ? prev : null),
+      ];
+      return pts.map((q) => `${q.x * S},${q.y * S}`).join(' ');
+    });
+  const outsideArea = `M0 0H${W}V${D}H0Z M${outline.map((q) => `${q.x * S} ${q.y * S}`).join(' L')}Z`;
   const openingRect = (f: Frame, item: KitchenItem) => localRect(f, item.x, item.x + item.width, -T, 0);
   /** Footprint used for highlighting: openings sit in the wall, sockets on its face, everything else in the room. */
   const footprint = (f: Frame, item: KitchenItem) =>
@@ -258,8 +275,16 @@ export function PlanDrawing({
 
       <g transform={`translate(${planOrigin(S)} ${planOrigin(S)})`}>
         {/* Walls and floor */}
-        {wallBands.map((b, i) => (
-          <rect key={i} {...b} fill="url(#planWallHatch)" stroke={INK} strokeWidth={1.75} />
+        {outline.length > 4 && <path d={outsideArea} fill="#e2e8f0" fillOpacity={0.5} fillRule="evenodd" />}
+        {wallBands.map((points, i) => (
+          <polygon
+            key={i}
+            points={points}
+            fill="url(#planWallHatch)"
+            stroke={INK}
+            strokeWidth={1.75}
+            strokeLinejoin="round"
+          />
         ))}
 
         {/* Island footprints */}
@@ -413,7 +438,7 @@ export function PlanDrawing({
                 key={run.id}
                 data-run-id={run.id}
                 onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined}
-                style={interactive ? { cursor: 'pointer' } : undefined}
+                style={interactive ? { cursor: vertical ? 'ew-resize' : 'ns-resize' } : undefined}
               >
                 <rect {...px(band)} fill="transparent" />
                 {isActive && (
@@ -430,7 +455,7 @@ export function PlanDrawing({
                 <Label
                   x={lp.x * S}
                   y={lp.y * S}
-                  text={`${run.name.toUpperCase()} · ${SIDE_LABELS[run.side ?? 'north'].toUpperCase()}`}
+                  text={`${run.name.toUpperCase()} · ${(directions[segmentIndex(run)] ?? '').toUpperCase()}${outline.length > 4 ? ` · ${fmt(f.length)}` : ''}`}
                   size={9}
                   weight={700}
                   fill={isActive ? SELECT : THIN}
