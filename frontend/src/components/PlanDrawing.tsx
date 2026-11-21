@@ -4,10 +4,18 @@ import { directionLabels, roomOutline, segmentIndex, segments, type Pt, type Seg
 import { computeGaps, fmt, isElectrical, isJoint, isOpening, layerOf } from '../lib/geometry';
 import {
   countertopRects,
+  islandFootprint,
   islandRect,
+  endProfiles,
+  islandOverhangs,
+  isIslandFront,
+  islandClearances,
+  stoolPoint,
+  STOOL_RADIUS_CM,
   itemPlanRect,
   localRect,
   partitionRect,
+  planFootprint,
   toPlan,
   wallFrame,
   WALL_THICKNESS_CM,
@@ -17,8 +25,12 @@ import {
 import { severityByItem, type Violation } from '../lib/rules';
 import { AMBER, Badge, DimH, DimV, Label, SELECT, WARN } from './Drawing';
 import { FONT, INK, THIN } from './ItemShape';
+import { directionName, runName, t as tr } from '../lib/i18n';
 
 export const PLAN_PAD = 90;
+/** Aisle distances (#15): red under 90 cm, amber under 105 cm (R4's working-aisle guideline). */
+const AISLE_RED = 90;
+const AISLE_AMBER = 105;
 const T = WALL_THICKNESS_CM;
 
 export const planSize = (data: ProjectData, scale: number) => ({
@@ -47,6 +59,12 @@ const SHORT: Record<KitchenItem['category'], string> = {
   door: 'DOOR',
   socket: 'S',
   power_socket: '16A',
+  stool: 'ST',
+  dishwasher: 'DW',
+  trash_cabinet: 'TR',
+  hood: 'HOOD',
+  end_panel: 'EP',
+  column: 'COL',
   partition_joint: '',
 };
 
@@ -116,12 +134,12 @@ export function PlanDrawing({
   const outsideArea = `M0 0H${W}V${D}H0Z M${outline.map((q) => `${q.x * S} ${q.y * S}`).join(' L')}Z`;
   const openingRect = (f: Frame, item: KitchenItem) => localRect(f, item.x, item.x + item.width, -T, 0);
   /** Footprint used for highlighting: openings sit in the wall, sockets on its face, everything else in the room. */
-  const footprint = (f: Frame, item: KitchenItem) =>
+  const footprint = (f: Frame, item: KitchenItem, run: WallRun) =>
     isOpening(item.category)
       ? openingRect(f, item)
       : isElectrical(item.category)
         ? localRect(f, item.x, item.x + item.width, 0, 4)
-        : itemPlanRect(f, item);
+        : planFootprint(data, run, item); // chairs round their seat (review finding R19)
 
   const itemProps = (run: WallRun, item: KitchenItem) => ({
     'data-item-id': item.id,
@@ -271,6 +289,9 @@ export function PlanDrawing({
           <rect width="8" height="8" fill="#ffffff" />
           <line x1="0" y1="0" x2="0" y2="8" stroke="#64748b" strokeWidth="1.2" />
         </pattern>
+        <marker id="aisleTick" viewBox="-4 -4 8 8" markerWidth={8} markerHeight={8} orient="auto">
+          <line x1={0} y1={-3.5} x2={0} y2={3.5} stroke="#64748b" strokeWidth={1.5} />
+        </marker>
         <pattern id="planWarnHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width="6" height="6" fill="#fee2e2" />
           <line x1="0" y1="0" x2="0" y2="6" stroke={WARN} strokeWidth="2" />
@@ -295,37 +316,81 @@ export function PlanDrawing({
           />
         ))}
 
-        {/* Island footprints */}
+        {/* Islands (#15): the countertop is the island (click to select, drag to move), its end profiles and a front
+            arrow; its cabinets are drawn like any others, the countertop over them further down. */}
         {runs
-          .filter(({ run }) => run.kind === 'island')
+          .filter(({ run }) => isIslandFront(run))
           .map(({ run }) => {
             const r = islandRect(run);
-            const isActive = run.id === active;
+            const isActive = run.id === active || data.walls.some((w) => w.id === active && w.hostId === run.id);
+            const color = isActive ? SELECT : THIN;
+            // Arrow just outside the front edge, past any chairs standing there.
+            const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+            const front = wallFrame(room, run).n;
+            const half = (Math.abs(front.x) > 0.5 ? r.w : r.h) / 2;
+            const reach = half + (run.items.some((i) => i.category === 'stool') ? 2 * STOOL_RADIUS_CM + 14 : 4);
+            const tip = { x: c.x + front.x * (reach + 9), y: c.y + front.y * (reach + 9) };
+            const side = { x: -front.y * 6, y: front.x * 6 };
+            const base = { x: c.x + front.x * reach, y: c.y + front.y * reach };
+            const all = islandFootprint(data, run);
             return (
               <g
                 key={run.id}
                 data-run-id={run.id}
+                data-island={run.id}
                 style={interactive ? { cursor: 'move' } : undefined}
                 onPointerDown={onRunPointerDown ? (e) => onRunPointerDown(e, run) : undefined}
               >
-                <rect
-                  {...px(r)}
-                  fill="#f8fafc"
-                  stroke={isActive ? SELECT : THIN}
-                  strokeWidth={isActive ? 2 : 1}
-                  strokeDasharray="6 4"
+                <rect {...px(r)} fill="#f8fafc" stroke={color} strokeWidth={isActive ? 2.5 : 1.5} />
+                {endProfiles(run).map((pr) => (
+                  <rect
+                    key={pr.side}
+                    data-profile={pr.kind}
+                    {...px(pr.rect)}
+                    fill={pr.kind === 'waterfall' ? '#94a3b8' : '#ffffff'}
+                    stroke={INK}
+                    strokeWidth={1.25}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                ))}
+                <polygon
+                  data-front-arrow
+                  points={[tip, { x: base.x + side.x, y: base.y + side.y }, { x: base.x - side.x, y: base.y - side.y }]
+                    .map((q) => `${q.x * S},${q.y * S}`)
+                    .join(' ')}
+                  fill={color}
+                  style={{ pointerEvents: 'none' }}
                 />
                 <Label
-                  x={(r.x + r.w / 2) * S}
-                  y={(r.y + r.h) * S + 10}
-                  text={`${run.name.toUpperCase()} ${fmt(run.widthCm)}×${fmt(run.depthCm ?? 90)}`}
+                  x={(all.x + all.w) * S + 6}
+                  y={(all.y + all.h / 2) * S}
+                  anchor="start"
+                  text={`${runName(run.name).toUpperCase()} ${fmt(run.widthCm)}×${fmt(run.depthCm ?? 90)}`}
                   size={8}
-                  fill={isActive ? SELECT : THIN}
+                  fill={color}
                   weight={600}
                 />
               </g>
             );
           })}
+        {/* Chairs (#14), on every island side */}
+        {runs.flatMap(({ run }) =>
+          run.items
+            .filter((i) => i.category === 'stool')
+            .map((st) => {
+              const c = stoolPoint(data, run, st);
+              const rr = Math.min(st.width, st.depth) / 2;
+              return (
+                <g key={st.id} {...itemProps(run, st)}>
+                  <circle cx={c.x * S} cy={c.y * S} r={rr * S} fill="#ffffff" stroke={INK} strokeWidth={1.25} />
+                  <circle cx={c.x * S} cy={c.y * S} r={rr * 0.45 * S} fill="none" stroke={THIN} strokeWidth={0.75} />
+                  {selectedId === st.id && (
+                    <circle cx={c.x * S} cy={c.y * S} r={rr * S + 3} fill="none" stroke={SELECT} strokeWidth={2} />
+                  )}
+                </g>
+              );
+            }),
+        )}
 
         {/* Partition walls (#10): a hatched body; each half selects the face on that side, the tip sets the length */}
         {runs
@@ -371,7 +436,7 @@ export function PlanDrawing({
                 <Label
                   x={lp.x * S}
                   y={lp.y * S}
-                  text={`${(a.name.match(/^Partition \d+/)?.[0] ?? a.name).toUpperCase()} · ${fmt(L)}`}
+                  text={`${runName(a.name.match(/^Partition \d+/)?.[0] ?? a.name).toUpperCase()} · ${fmt(L)}`}
                   size={8}
                   weight={700}
                   fill={activeFace ? SELECT : THIN}
@@ -415,26 +480,62 @@ export function PlanDrawing({
                     strokeWidth={1.5}
                   />
                   {floorSymbol(f, item, r)}
-                  {text(r, `${SHORT[item.category]} ${fmt(item.width)}`, 8.5)}
+                  {text(r, `${tr(SHORT[item.category])} ${fmt(item.width)}`, 8.5)}
                 </g>
               );
             }),
         )}
 
-        {/* Countertops */}
+        {/* Columns and pipe boxes (#6 phase 2): solid building elements against the wall */}
         {runs.flatMap(({ run, f }) =>
-          countertopRects(f, run).map((r, i) => (
-            <rect
-              key={`${run.id}-ct-${i}`}
-              {...px(r)}
-              fill="#94a3b8"
-              fillOpacity={0.18}
-              stroke={INK}
-              strokeWidth={1}
-              style={{ pointerEvents: 'none' }}
-            />
-          )),
+          run.items
+            .filter((i) => i.category === 'column')
+            .map((item) => {
+              const r = itemPlanRect(f, item);
+              return (
+                <g key={item.id} {...itemProps(run, item)}>
+                  <rect {...px(r)} fill="url(#planWallHatch)" stroke={INK} strokeWidth={1.75} />
+                  {text(r, `${tr(SHORT[item.category])} ${fmt(item.width)}`, 8)}
+                </g>
+              );
+            }),
         )}
+
+        {/* Countertops: one piece over each island (#15), the parts that overhang shaded; along walls, per run */}
+        {runs
+          .filter(({ run }) => isIslandFront(run))
+          .map(({ run }) => (
+            <g key={`top-${run.id}`} style={{ pointerEvents: 'none' }}>
+              <rect {...px(islandRect(run))} fill="#94a3b8" fillOpacity={0.18} stroke={INK} strokeWidth={1.25} />
+              {islandOverhangs(data, run).map((o) => (
+                <g key={o.face} data-overhang={o.face}>
+                  <rect {...px(o.rect)} fill="url(#planHatch)" fillOpacity={0.35} />
+                  <Label
+                    x={(o.rect.x + o.rect.w / 2) * S}
+                    y={(o.rect.y + o.rect.h / 2) * S}
+                    text={tr('overhang {cm}', { cm: fmt(o.cantilever) })}
+                    size={7.5}
+                    fill={THIN}
+                  />
+                </g>
+              ))}
+            </g>
+          ))}
+        {runs
+          .filter(({ run }) => run.kind !== 'island')
+          .flatMap(({ run, f }) =>
+            countertopRects(f, run).map((r, i) => (
+              <rect
+                key={`${run.id}-ct-${i}`}
+                {...px(r)}
+                fill="#94a3b8"
+                fillOpacity={0.18}
+                stroke={INK}
+                strokeWidth={1}
+                style={{ pointerEvents: 'none' }}
+              />
+            )),
+          )}
 
         {/* Sink / cooktop on the counter */}
         {runs.flatMap(({ run, f }) =>
@@ -451,7 +552,7 @@ export function PlanDrawing({
         {/* Upper cabinets: dashed (above the cut plane) */}
         {runs.flatMap(({ run, f }) =>
           run.items
-            .filter((i) => i.category === 'upper_cabinet' || i.category === 'shelf')
+            .filter((i) => i.category === 'upper_cabinet' || i.category === 'shelf' || i.category === 'hood')
             .map((item) => {
               const r = itemPlanRect(f, item);
               return (
@@ -497,7 +598,7 @@ export function PlanDrawing({
                 <Label
                   x={lp.x * S}
                   y={lp.y * S}
-                  text={`OPEN · ${run.name.toUpperCase()}`}
+                  text={`${tr('OPEN')} · ${runName(run.name).toUpperCase()}`}
                   size={8.5}
                   fill="#94a3b8"
                   weight={700}
@@ -536,7 +637,7 @@ export function PlanDrawing({
                 <Label
                   x={lp.x * S}
                   y={lp.y * S}
-                  text={`${run.name.toUpperCase()} · ${(directions[segmentIndex(run)] ?? '').toUpperCase()}${outline.length > 4 ? ` · ${fmt(f.length)}` : ''}`}
+                  text={`${runName(run.name).toUpperCase()} · ${directionName(directions[segmentIndex(run)] ?? '').toUpperCase()}${outline.length > 4 ? ` · ${fmt(f.length)}` : ''}`}
                   size={9}
                   weight={700}
                   fill={isActive ? SELECT : THIN}
@@ -638,7 +739,7 @@ export function PlanDrawing({
                 return (
                   <g key={`${run.id}-${layer}-gap-${i}`} style={{ pointerEvents: 'none' }}>
                     <rect {...px(r)} fill="url(#planAmberHatch)" stroke={AMBER} strokeWidth={1} />
-                    <Badge x={c.x * S} y={c.y * S} text={`! GAP ${g.width.toFixed(1)} cm`} color={AMBER} />
+                    <Badge x={c.x * S} y={c.y * S} text={tr('! GAP {w} cm', { w: g.width.toFixed(1) })} color={AMBER} />
                   </g>
                 );
               }),
@@ -648,7 +749,7 @@ export function PlanDrawing({
           run.items
             .filter((i) => flagged.has(i.id) && !isJoint(i))
             .map((item) => {
-              const r = footprint(f, item);
+              const r = footprint(f, item, run);
               return (
                 <rect
                   key={`flag-${item.id}`}
@@ -686,13 +787,50 @@ export function PlanDrawing({
             );
           })}
 
+        {/* Aisles (#15): the distance from each side of an island to what faces it */}
+        {runs
+          .filter(({ run }) => isIslandFront(run))
+          .flatMap(({ run }) =>
+            islandClearances(data, run).map((c) => {
+              const color = c.distance < AISLE_RED ? WARN : c.distance < AISLE_AMBER ? AMBER : THIN;
+              const mid = { x: (c.from.x + c.to.x) / 2, y: (c.from.y + c.to.y) / 2 };
+              const vertical = Math.abs(c.to.x - c.from.x) < 0.5;
+              return (
+                <g key={`aisle-${run.id}-${c.face}`} data-aisle={c.face} style={{ pointerEvents: 'none' }}>
+                  <line
+                    x1={c.from.x * S}
+                    y1={c.from.y * S}
+                    x2={c.to.x * S}
+                    y2={c.to.y * S}
+                    stroke={color}
+                    strokeWidth={1.25}
+                    strokeDasharray="5 3"
+                    markerStart="url(#aisleTick)"
+                    markerEnd="url(#aisleTick)"
+                  />
+                  {c.distance > 0 && (
+                    <Label
+                      x={mid.x * S + (vertical ? 4 : 0)}
+                      y={mid.y * S + (vertical ? 0 : -6)}
+                      anchor={vertical ? 'start' : 'middle'}
+                      text={`${fmt(c.distance)}`}
+                      size={9}
+                      weight={700}
+                      fill={color}
+                    />
+                  )}
+                </g>
+              );
+            }),
+          )}
+
         {/* Selection */}
         {interactive &&
           selectedId &&
           runs.map(({ run, f }) => {
             const item = run.items.find((i) => i.id === selectedId);
-            if (!item) return null;
-            const r = footprint(f, item);
+            if (!item || item.category === 'stool') return null; // chairs show their own selection ring
+            const r = footprint(f, item, run);
             return (
               <rect
                 key="sel"
@@ -740,10 +878,17 @@ export function PlanDrawing({
           })}
 
         {/* Room dimensions */}
-        <DimH x0={0} x1={W} y={-t - 44} label={`ROOM ${fmt(room.widthCm)} cm`} color={INK} extFrom={-t - 4} />
+        <DimH
+          x0={0}
+          x1={W}
+          y={-t - 44}
+          label={tr('ROOM {cm} cm', { cm: fmt(room.widthCm) })}
+          color={INK}
+          extFrom={-t - 4}
+        />
         <DimV x={-t - 44} y0={0} y1={D} label={`${fmt(room.depthCm)} cm`} color={INK} extFrom={-t - 4} />
         <text x={W + t + 12} y={D + t} fontSize={8} fontFamily={FONT} fill={THIN} style={{ pointerEvents: 'none' }}>
-          CEILING {fmt(room.heightCm)}
+          {tr('CEILING')} {fmt(room.heightCm)}
         </text>
       </g>
     </g>

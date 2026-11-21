@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Maximize, Minus, Plus } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 interface ViewBox {
   x: number;
@@ -109,14 +110,14 @@ export function ZoomControls({
 }) {
   return (
     <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded border border-slate-300 bg-white/95 p-1 shadow-sm">
-      <button className="btn border-0 px-1.5" title="Zoom out" onClick={() => onZoom(1 / 1.2)}>
+      <button className="btn border-0 px-1.5" title={t('Zoom out')} onClick={() => onZoom(1 / 1.2)}>
         <Minus size={14} />
       </button>
       <span className="w-12 text-center font-mono text-xs">{Math.round(zoom * 100)}%</span>
-      <button className="btn border-0 px-1.5" title="Zoom in" onClick={() => onZoom(1.2)}>
+      <button className="btn border-0 px-1.5" title={t('Zoom in')} onClick={() => onZoom(1.2)}>
         <Plus size={14} />
       </button>
-      <button className="btn border-0 px-1.5" title="Fit to screen" onClick={onFit}>
+      <button className="btn border-0 px-1.5" title={t('Fit to screen')} onClick={onFit}>
         <Maximize size={14} />
       </button>
     </div>

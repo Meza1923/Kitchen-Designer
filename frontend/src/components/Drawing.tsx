@@ -3,6 +3,7 @@ import type { KitchenItem, WallRun } from '../types';
 import { computeCountertops, computeGaps, fmt, isJoint, itemsInLayer, layerOf, type Gap } from '../lib/geometry';
 import { severityByItem, type Violation } from '../lib/rules';
 import { FONT, INK, ItemShape, itemBounds, THIN, type ShapeContext } from './ItemShape';
+import { t } from '../lib/i18n';
 
 export const PAD = { left: 80, right: 80, top: 90, bottom: 120 };
 export const WARN = '#dc2626';
@@ -51,7 +52,7 @@ export function Label({
       transform={rotate ? `rotate(${rotate} ${x} ${y})` : undefined}
       style={{ pointerEvents: 'none', userSelect: 'none' }}
     >
-      {text}
+      {t(text)}
     </text>
   );
 }
@@ -120,7 +121,8 @@ export function DimV({
   );
 }
 
-export function Badge({ x, y, text, color = WARN }: { x: number; y: number; text: string; color?: string }) {
+export function Badge({ x, y, text: raw, color = WARN }: { x: number; y: number; text: string; color?: string }) {
+  const text = t(raw);
   const w = textWidth(text, 9) + 10;
   return (
     <g style={{ pointerEvents: 'none' }}>
@@ -139,7 +141,7 @@ function GapWarning({ gap, H, S }: { gap: Gap; H: number; S: number }) {
     <g>
       <rect x={x} y={yTop} width={w} height={h} fill="url(#amberHatch)" stroke={AMBER} strokeWidth={1.25} />
       <line x1={x + w / 2} y1={yTop} x2={x + w / 2} y2={yTop - 14} stroke={AMBER} strokeWidth={1} />
-      <Badge x={x + w / 2} y={yTop - 22} text={`! GAP: ${gap.width.toFixed(1)} cm (<10cm)`} color={AMBER} />
+      <Badge x={x + w / 2} y={yTop - 22} text={t('! GAP: {w} cm (<10cm)', { w: gap.width.toFixed(1) })} color={AMBER} />
     </g>
   );
 }
@@ -152,10 +154,23 @@ export interface DrawingProps {
   onItemPointerDown?: (e: ReactPointerEvent, item: KitchenItem) => void;
   /** Rule violations for the project (see lib/rules.ts); only those touching this run are drawn. */
   violations: Violation[];
+  /** Island ends (#14): the end's profile drawn behind everything, up to `top` cm. */
+  backdrop?: { kind: 'panel' | 'waterfall'; top: number };
+  /** An island side (#15): no wall or ceiling, and the island's countertop drawn right across at `top` cm. */
+  island?: { top: number; thickness: number };
 }
 
 /** The full schematic elevation of one wall, in px, with its origin at the top-left of the padded sheet. */
-export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointerDown, violations }: DrawingProps) {
+export function Drawing({
+  wall,
+  scale: S,
+  selectedId,
+  interactive,
+  onItemPointerDown,
+  violations,
+  backdrop,
+  island,
+}: DrawingProps) {
   const H = wall.heightCm;
   const W = wall.widthCm * S;
   const Hpx = H * S;
@@ -171,7 +186,8 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
       (v.wallArea?.runId === wall.id || v.items.some((i) => i.runId === wall.id)),
   );
   const flagged = severityByItem(shown);
-  const countertops = computeCountertops(wall);
+  // An island's countertop is one piece over all its sides (#15), drawn below instead of per unit.
+  const countertops = island ? [] : computeCountertops(wall);
   const floor = itemsInLayer(wall, 'floor').sort((a, b) => a.x - b.x);
   const upper = itemsInLayer(wall, 'upper').sort((a, b) => a.x - b.x);
   const counter = itemsInLayer(wall, 'counter');
@@ -250,18 +266,56 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
       </defs>
 
       <g transform={`translate(${PAD.left} ${PAD.top})`}>
-        {/* Wall, ceiling and floor */}
-        <rect x={0} y={0} width={W} height={Hpx} fill="#ffffff" fillOpacity={0.55} stroke="#94a3b8" strokeWidth={1} />
-        <line x1={-12} y1={0} x2={W + 12} y2={0} stroke={THIN} strokeWidth={1} strokeDasharray="10 4 2 4" />
-        <Label x={W + 14} y={0} text="CEILING" anchor="start" size={8} />
+        {/* Wall, ceiling and floor (an island side has only the floor) */}
+        {!island && (
+          <>
+            <rect
+              x={0}
+              y={0}
+              width={W}
+              height={Hpx}
+              fill="#ffffff"
+              fillOpacity={0.55}
+              stroke="#94a3b8"
+              strokeWidth={1}
+            />
+            <line x1={-12} y1={0} x2={W + 12} y2={0} stroke={THIN} strokeWidth={1} strokeDasharray="10 4 2 4" />
+            <Label x={W + 14} y={0} text="CEILING" anchor="start" size={8} />
+          </>
+        )}
         <rect x={-12} y={Hpx} width={W + 24} height={8} fill="url(#ground)" />
         <line x1={-12} y1={Hpx} x2={W + 12} y2={Hpx} stroke={INK} strokeWidth={2.5} />
         <Label x={W + 14} y={Hpx + 1} text="FFL ±0" anchor="start" size={8} />
-        <line x1={0} y1={0} x2={0} y2={Hpx} stroke={INK} strokeWidth={2} />
-        <line x1={W} y1={0} x2={W} y2={Hpx} stroke={INK} strokeWidth={2} />
+        {!island && (
+          <>
+            <line x1={0} y1={0} x2={0} y2={Hpx} stroke={INK} strokeWidth={2} />
+            <line x1={W} y1={0} x2={W} y2={Hpx} stroke={INK} strokeWidth={2} />
+          </>
+        )}
 
+        {backdrop && (
+          <g data-backdrop={backdrop.kind} style={{ pointerEvents: 'none' }}>
+            <rect
+              x={0}
+              y={(H - backdrop.top) * S}
+              width={W}
+              height={backdrop.top * S}
+              fill={backdrop.kind === 'waterfall' ? '#cbd5e1' : '#ffffff'}
+              stroke={INK}
+              strokeWidth={1.75}
+            />
+            <Label
+              x={W / 2}
+              y={(H - backdrop.top / 2) * S}
+              text={backdrop.kind === 'waterfall' ? 'WATERFALL' : 'END PANEL'}
+              size={9}
+              weight={700}
+            />
+          </g>
+        )}
         {/* Elements, back to front */}
         {floor.map(renderItem)}
+        {itemsInLayer(wall, 'seat').map(renderItem)}
         {countertops.map((c, i) => (
           <rect
             key={i}
@@ -275,6 +329,25 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             style={{ pointerEvents: 'none' }}
           />
         ))}
+        {island && (
+          <g data-island-top style={{ pointerEvents: 'none' }}>
+            <rect
+              x={0}
+              y={(H - island.top) * S}
+              width={W}
+              height={island.thickness * S}
+              fill="#cbd5e1"
+              stroke={INK}
+              strokeWidth={1.75}
+            />
+            <Label
+              x={W / 2}
+              y={(H - island.top) * S - 8}
+              text={t('COUNTERTOP {cm}', { cm: fmt(wall.widthCm) })}
+              size={8}
+            />
+          </g>
+        )}
         {upper.map(renderItem)}
         {counter.map(renderItem)}
         {electrical.map(renderItem)}
@@ -341,7 +414,7 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             key={i.id}
             x={(i.x + i.width / 2) * S}
             y={rowUpperLabels}
-            text={`${i.label ? i.label + ' ' : ''}${fmt(i.width)}×${fmt(i.height)}`}
+            text={`${i.label ? t(i.label) + ' ' : ''}${fmt(i.width)}×${fmt(i.height)}`}
             size={8}
           />
         ))}
@@ -358,7 +431,14 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             color={g.warning ? AMBER : '#94a3b8'}
           />
         ))}
-        <DimH x0={0} x1={W} y={rowTotal} label={`WALL ${fmt(wall.widthCm)} cm`} color={INK} extFrom={-4} />
+        <DimH
+          x0={0}
+          x1={W}
+          y={rowTotal}
+          label={t(island ? 'ISLAND SIDE {cm} cm' : 'WALL {cm} cm', { cm: fmt(wall.widthCm) })}
+          color={INK}
+          extFrom={-4}
+        />
 
         {/* Floor chain (below the wall) */}
         {floor.map((i) => (
@@ -366,7 +446,7 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             key={i.id}
             x={(i.x + i.width / 2) * S}
             y={rowFloorLabels}
-            text={`${i.label ? i.label + ' ' : ''}${fmt(i.width)}×${fmt(i.height)}`}
+            text={`${i.label ? t(i.label) + ' ' : ''}${fmt(i.width)}×${fmt(i.height)}`}
             size={8}
           />
         ))}
@@ -396,15 +476,21 @@ export function Drawing({ wall, scale: S, selectedId, interactive, onItemPointer
             x0={c.x * S}
             x1={(c.x + c.width) * S}
             y={rowCountertop}
-            label={`COUNTERTOP ${fmt(c.width)}`}
+            label={t('COUNTERTOP {cm}', { cm: fmt(c.width) })}
             color={THIN}
           />
         ))}
 
         {/* Vertical dimensions */}
-        <DimV x={-36} y0={0} y1={Hpx} label={`H ${fmt(H)} cm`} color={INK} extFrom={-4} />
+        <DimV x={-36} y0={0} y1={Hpx} label={t('H {cm} cm', { cm: fmt(H) })} color={INK} extFrom={-4} />
         {counterTopPx !== null && (
-          <DimV x={W + 62} y0={(H - counterTopPx) * S} y1={Hpx} label={`CT ${fmt(counterTopPx)}`} extFrom={W + 4} />
+          <DimV
+            x={W + 62}
+            y0={(H - counterTopPx) * S}
+            y1={Hpx}
+            label={t('CT {cm}', { cm: fmt(counterTopPx) })}
+            extFrom={W + 4}
+          />
         )}
 
         {/* Selection */}

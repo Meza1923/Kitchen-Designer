@@ -4,6 +4,7 @@ import type { Violation } from '../lib/rules';
 import { canMoveVertically, clampY, round1, snapX } from '../lib/geometry';
 import { Drawing, drawingSize, PAD } from './Drawing';
 import { GridBackground, useShiftHeld, useViewport, ZoomControls } from './viewport';
+import { runName, t } from '../lib/i18n';
 
 export const SCALE = 2; // px per cm at 100% zoom
 
@@ -21,10 +22,14 @@ interface Props {
   onSelect: (id: string | null) => void;
   onMoveItem: (id: string, pos: { x: number; y: number }) => void;
   violations: Violation[];
+  /** Island ends (#14): the end profile drawn behind the elements. */
+  backdrop?: { kind: 'panel' | 'waterfall'; top: number };
+  /** An island side (#15): its countertop, and no wall. */
+  island?: { top: number; thickness: number };
 }
 
 /** Interactive front elevation of one wall run. */
-export function Canvas({ wall, selectedId, onSelect, onMoveItem, violations }: Props) {
+export function Canvas({ wall, selectedId, onSelect, onMoveItem, violations, backdrop, island }: Props) {
   const vp = useViewport(drawingSize(wall, SCALE), `${wall.id}:${wall.widthCm}:${wall.heightCm}`);
   const shiftHeld = useShiftHeld();
   const drag = useRef<ItemDrag | null>(null);
@@ -63,7 +68,7 @@ export function Canvas({ wall, selectedId, onSelect, onMoveItem, violations }: P
   };
 
   return (
-    <div ref={vp.wrapRef} className="relative h-full w-full overflow-hidden bg-[#f8fafc]">
+    <div ref={vp.wrapRef} className="relative h-full w-full overflow-hidden bg-[#f8fafc]" dir="ltr">
       <svg
         ref={vp.svgRef}
         className="h-full w-full touch-none select-none"
@@ -81,16 +86,20 @@ export function Canvas({ wall, selectedId, onSelect, onMoveItem, violations }: P
           interactive
           onItemPointerDown={onItemPointerDown}
           violations={violations}
+          backdrop={backdrop}
+          island={island}
         />
       </svg>
       <ZoomControls zoom={vp.zoom} onZoom={(f) => vp.zoomAt(f)} onFit={vp.fit} />
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
-        <span className="font-semibold text-slate-700">ELEVATION · {wall.name}</span>
+        <span className="font-semibold text-slate-700">
+          {t('ELEVATION')} · {runName(wall.name)}
+        </span>
         {' · '}
         {shiftHeld ? (
-          <span className="font-semibold text-amber-600">SNAP OFF · freeform 1 cm</span>
+          <span className="font-semibold text-amber-600">{t('SNAP OFF · freeform 1 cm')}</span>
         ) : (
-          'snap 3 cm · Shift = freeform'
+          t('snap 3 cm · Shift = freeform')
         )}
       </div>
     </div>

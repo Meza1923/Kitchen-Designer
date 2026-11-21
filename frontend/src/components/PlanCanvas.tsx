@@ -2,11 +2,12 @@ import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { KitchenItem, ProjectData, WallRun } from '../types';
 import type { Violation } from '../lib/rules';
 import { snapX } from '../lib/geometry';
-import { planPointToWallX, snapTo, wallFrame } from '../lib/plan';
+import { islandOf, planPointToWallX, snapTo, wallFrame } from '../lib/plan';
 import { dragCorner, dragWall } from '../lib/roomShape';
 import { roomOutline, segments } from '../lib/outline';
 import { planOrigin, PlanDrawing, planSize } from './PlanDrawing';
 import { GridBackground, useShiftHeld, useViewport, ZoomControls } from './viewport';
+import { t } from '../lib/i18n';
 
 export const PLAN_SCALE = 2; // px per cm at 100% zoom
 const ISLAND_GRID_CM = 5;
@@ -148,11 +149,13 @@ export function PlanCanvas({
       return;
     }
     if (run.kind !== 'island') return;
+    // Side B of a two-sided island moves with its island (#9).
+    const island = islandOf(data, run) ?? run;
     vp.svgRef.current!.setPointerCapture(e.pointerId);
     drag.current = {
       kind: 'island',
-      runId: run.id,
-      startPlan: { x: run.planX ?? 0, y: run.planY ?? 0 },
+      runId: island.id,
+      startPlan: { x: island.planX ?? 0, y: island.planY ?? 0 },
       startPt: toCm(e),
       moved: false,
     };
@@ -264,7 +267,7 @@ export function PlanCanvas({
   };
 
   return (
-    <div ref={vp.wrapRef} className="relative h-full w-full overflow-hidden bg-[#f8fafc]">
+    <div ref={vp.wrapRef} className="relative h-full w-full overflow-hidden bg-[#f8fafc]" dir="ltr">
       <svg
         ref={vp.svgRef}
         className="h-full w-full touch-none select-none"
@@ -294,10 +297,11 @@ export function PlanCanvas({
       </svg>
       <ZoomControls zoom={vp.zoom} onZoom={(f) => vp.zoomAt(f)} onFit={vp.fit} />
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
-        <span className="font-semibold text-slate-700">PLAN</span>
-        {' · '}click a wall to make it active · drag walls, corners and items
+        <span className="font-semibold text-slate-700">{t('PLAN')}</span>
         {' · '}
-        {shiftHeld ? <span className="font-semibold text-amber-600">SNAP OFF</span> : 'Shift = freeform'}
+        {t('click a wall to make it active · drag walls, corners and items')}
+        {' · '}
+        {shiftHeld ? <span className="font-semibold text-amber-600">{t('SNAP OFF')}</span> : t('Shift = freeform')}
       </div>
     </div>
   );

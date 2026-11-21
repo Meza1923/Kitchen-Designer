@@ -2,6 +2,7 @@
 import { computeGaps, computeOverlaps, computeSocketIssues, computeUnsupported, fmt } from '../geometry';
 import { computePlanConflicts } from '../plan';
 import { at, itemName, perRun, ref, type Rule, type Violation } from './core';
+import { runName, t } from '../i18n';
 
 export const BASE_RULES: Rule[] = [
   {
@@ -15,7 +16,14 @@ export const BASE_RULES: Rule[] = [
           rule: 'overlap',
           severity: 'error',
           badge: 'OVERLAP',
-          message: `${itemName(a)} (X ${fmt(a.x)}) and ${itemName(b)} (X ${fmt(b.x)}) on ${run.name} overlap by ${fmt(o.x1 - o.x0)} cm.`,
+          message: t('{name} (X {aX}) and {name2} (X {bX}) on {run} overlap by {x0} cm.', {
+            name: itemName(a),
+            aX: fmt(a.x),
+            name2: itemName(b),
+            bX: fmt(b.x),
+            run: runName(run.name),
+            x0: fmt(o.x1 - o.x0),
+          }),
           items: [ref(run, a), ref(run, b)],
           wallArea: { runId: run.id, ...o },
         };
@@ -30,7 +38,7 @@ export const BASE_RULES: Rule[] = [
         rule: 'no_countertop',
         severity: 'error',
         badge: 'NO COUNTERTOP',
-        message: `${at(run, i)} is not fully on a countertop.`,
+        message: t('{item} is not fully on a countertop.', { item: at(run, i) }),
         items: [ref(run, i)],
       })),
     ),
@@ -45,8 +53,8 @@ export const BASE_RULES: Rule[] = [
         badge: reason === 'opening' ? 'SOCKET IN OPENING' : 'SOCKET HIDDEN',
         message:
           reason === 'opening'
-            ? `${at(run, item)} is inside a window or door opening.`
-            : `${at(run, item)} is covered by a cabinet.`,
+            ? t('{item} is inside a window or door opening.', { item: at(run, item) })
+            : t('{item} is covered by a cabinet.', { item: at(run, item) }),
         items: [ref(run, item)],
       })),
     ),
@@ -61,8 +69,12 @@ export const BASE_RULES: Rule[] = [
           .map((g) => ({
             rule: 'narrow_gap',
             severity: 'warning',
-            badge: `GAP ${fmt(g.width)} cm`,
-            message: `${fmt(g.width)} cm gap on ${run.name} at X ${fmt(g.x0)}: too narrow to use; close it or add a filler.`,
+            badge: t('GAP {gWidth} cm', { gWidth: fmt(g.width) }),
+            message: t('{gWidth} cm gap on {run} at X {x0}: too narrow to use; close it or add a filler.', {
+              gWidth: fmt(g.width),
+              run: runName(run.name),
+              x0: fmt(g.x0),
+            }),
             items: [],
             wallArea: { runId: run.id, x0: g.x0, x1: g.x1, y0: g.y0, y1: g.y1 },
           })),
@@ -90,18 +102,21 @@ export const BASE_RULES: Rule[] = [
             rule: 'outside_room',
             severity: 'error',
             badge: 'OUTSIDE ROOM',
-            message: `${island?.name ?? 'Island'} extends outside the room.`,
+            message: t('{island} extends outside the room.', { island: runName(island?.name ?? 'Island') }),
             items,
             planArea: c.rect,
           };
         }
-        const bName = b ? at(b.run, b.item) : (data.walls.find((w) => w.id === c.b)?.name ?? 'an island');
+        const bName = b ? at(b.run, b.item) : runName(data.walls.find((w) => w.id === c.b)?.name ?? t('an island'));
         return c.kind === 'clash'
           ? {
               rule: 'plan_clash',
               severity: 'error',
               badge: 'CLASH',
-              message: `${a ? at(a.run, a.item) : (data.walls.find((w) => w.id === c.a)?.name ?? 'An element')} clashes with ${bName} in the plan.`,
+              message: t('{element} clashes with {bName} in the plan.', {
+                element: a ? at(a.run, a.item) : runName(data.walls.find((w) => w.id === c.a)?.name ?? t('An element')),
+                bName,
+              }),
               items,
               planArea: c.rect,
             }
@@ -109,7 +124,10 @@ export const BASE_RULES: Rule[] = [
               rule: 'door_swing',
               severity: 'error',
               badge: 'DOOR SWING',
-              message: `The swing of ${a ? at(a.run, a.item) : 'a door'} is blocked by ${bName}.`,
+              message: t('The swing of {door} is blocked by {bName}.', {
+                door: a ? at(a.run, a.item) : t('a door'),
+                bName,
+              }),
               items,
               planArea: c.rect,
             };

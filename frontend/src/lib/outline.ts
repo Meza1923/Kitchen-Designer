@@ -7,6 +7,7 @@
  * A rectangle W × D is [(0,0), (W,0), (W,D), (0,D)]: north, east, south, west, the same as the original model.
  */
 import type { PlanPoint, Room, WallRun, WallSide } from '../types';
+import { t } from './i18n';
 
 export type Pt = PlanPoint;
 
@@ -237,10 +238,10 @@ export function moveWall(outline: Pt[], index: number, delta: number): { outline
   const after = segments(moved);
   for (const k of [(index + n - 1) % n, (index + 1) % n]) {
     if (after[k].length < 1 || after[k].u.x * before[k].u.x + after[k].u.y * before[k].u.y < 0) {
-      return 'a wall next to it would get shorter than 1 cm';
+      return t('a wall next to it would get shorter than 1 cm');
     }
   }
-  if (selfIntersects(moved)) return 'the room would fold over itself';
+  if (selfIntersects(moved)) return t('the room would fold over itself');
   const shift = { x: 0 - Math.min(...moved.map((q) => q.x)), y: 0 - Math.min(...moved.map((q) => q.y)) }; // 0 − min, so no -0
   const round = (v: number) => Math.round(v * 10) / 10;
   return { outline: moved.map((q) => ({ x: round(q.x + shift.x), y: round(q.y + shift.y) })), shift };
@@ -254,9 +255,9 @@ export function setWallLength(outline: Pt[], index: number, length: number): { o
   const segs = segments(outline);
   const closing = closingWalls(outline);
   if (index === closing.horizontal || index === closing.vertical) {
-    return 'this wall is computed from the others so the room stays closed: change another wall instead';
+    return t('this wall is computed from the others so the room stays closed: change another wall instead');
   }
-  if (!(length > 0)) return 'a wall must be longer than 0 cm';
+  if (!(length > 0)) return t('a wall must be longer than 0 cm');
   const lengths = segs.map((s) => (s.index === index ? length : s.length));
   // Closing lengths: whatever brings the walk back to the start, along each closing wall's own direction.
   const sum = (axis: 'x' | 'y', skip: number) =>
@@ -266,7 +267,9 @@ export function setWallLength(outline: Pt[], index: number, length: number): { o
   lengths[closing.horizontal] = -sum('x', closing.horizontal) / h.u.x;
   lengths[closing.vertical] = -sum('y', closing.vertical) / v.u.y;
   if (lengths[closing.horizontal] < 1 || lengths[closing.vertical] < 1) {
-    return 'with that length the room would not close: the walls on the other side would have to be shorter than 1 cm';
+    return t(
+      'with that length the room would not close: the walls on the other side would have to be shorter than 1 cm',
+    );
   }
   let p = { ...outline[0] };
   const walked = segs.map((s, k) => {
@@ -274,7 +277,38 @@ export function setWallLength(outline: Pt[], index: number, length: number): { o
     p = { x: p.x + s.u.x * lengths[k], y: p.y + s.u.y * lengths[k] };
     return { x: Math.round(start.x * 10) / 10, y: Math.round(start.y * 10) / 10 };
   });
-  if (selfIntersects(walked)) return 'with that length the room would fold over itself';
+  if (selfIntersects(walked)) return t('with that length the room would fold over itself');
   const shift = { x: 0 - Math.min(...walked.map((q) => q.x)), y: 0 - Math.min(...walked.map((q) => q.y)) }; // 0 − min, so no -0
   return { outline: walked.map((q) => ({ x: q.x + shift.x, y: q.y + shift.y })), shift };
+}
+
+/**
+ * Cut a niche (a recess behind the wall, FEATURES.md #6 phase 2) into wall `index`: `width` cm wide starting `x` cm
+ * along the wall, `depth` cm deep. The wall becomes five walls: the part before the niche, the niche's two sides, its
+ * back and the part after. Returns the new outline (bounding box back at 0, 0) and that move, or why it can't be cut.
+ */
+export function nicheOutline(
+  outline: Pt[],
+  index: number,
+  x: number,
+  width: number,
+  depth: number,
+): { outline: Pt[]; shift: Pt } | string {
+  const seg = segments(outline)[index];
+  if (!seg) return t('that wall no longer exists');
+  if (!(width >= 1) || !(depth >= 1)) return t('a niche needs a width and a depth of at least 1 cm');
+  if (x < 1 || x + width > seg.length - 1)
+    return t("it doesn't fit: leave at least 1 cm of wall on both sides (the wall is {segLength} cm)", {
+      segLength: Math.round(seg.length),
+    });
+  const at = (along: number, out: number) => ({
+    x: seg.p.x + seg.u.x * along - seg.n.x * out,
+    y: seg.p.y + seg.u.y * along - seg.n.y * out,
+  });
+  const inserted = [at(x, 0), at(x, depth), at(x + width, depth), at(x + width, 0)];
+  const cut = [...outline.slice(0, index + 1), ...inserted, ...outline.slice(index + 1)];
+  if (selfIntersects(cut)) return t('the niche would run into another wall of the room');
+  const shift = { x: 0 - Math.min(...cut.map((q) => q.x)), y: 0 - Math.min(...cut.map((q) => q.y)) };
+  const round = (v: number) => Math.round(v * 10) / 10;
+  return { outline: cut.map((q) => ({ x: round(q.x + shift.x), y: round(q.y + shift.y) })), shift };
 }

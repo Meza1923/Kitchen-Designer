@@ -4,7 +4,7 @@ Every feature, past and future. Status values: `Planned` · `In progress` · `In
 
 **How it's kept:** the developer (Claude) adds every new feature request as the next row before building it, with a section under Details (What, Done when, Decided) and a dated change-log line. When the work is ready, the status moves to `In review` with a handoff note (branch, what changed, how to check it). The reviewer (Gemini) then reviews it and logs findings in `ISSUES.md`. The feature becomes `Done` once the findings are resolved and the owner accepts it. Open design questions go to `ISSUES.md` → Open questions, not here.
 
-Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 goes first; corner rules use a run-end helper that #6 later extends to any room outline. The filler element (#4) doesn't depend on #6 and was built early; only its corner-aware part waits for #6.V
+Suggested build order: 1 → 2 → 3 (small and independent)Gemini review: feat/9-islands, then 5 and 6. #5 goes first; corner rules use a run-end helper that #6 later extends to any room outline. The filler element (#4) doesn't depend on #6 and was built early; only its corner-aware part waits for #6.V
 
 | # | Feature | Size | Status |
 |---|---|---|---|
@@ -12,12 +12,17 @@ Suggested build order: 1 → 2 → 3 (small and independent), then 5 and 6. #5 g
 | 2 | Fridge types: side-by-side, French door, top/bottom | Small–Medium | Done (to test in the app) |
 | 3 | More realistic water bar and coffee machine | Small | Done (to test in the app) |
 | 4 | Corner fillers | Medium | Done: filler element plus one-click fillers where rules need them |
-| 5 | Design rules: problems framed in the plan and elevation (19 rules) | Large | In progress: phases A and B done, phase C next |
-| 6 | Room shapes beyond a rectangle (any outline, 90° corners) | Large | Phase 1 + 1b Done; phase 2 Planned |
+| 5 | Design rules: problems framed in the plan and elevation (19 rules) | Large | Done |
+| 6 | Room shapes beyond a rectangle (any outline, 90° corners) | Large | Done |
 | 7 | Shelves: open wall shelf, shelves inside cabinets, open cabinets | Small–Medium | Done (to test in the app) |
-| 8 | Hebrew and English interface | Large | Planned |
-| 9 | Islands: two-sided, seating overhang, front marker | Medium–Large | Planned |
+| 8 | Hebrew and English interface | Large | Done (Hebrew terms to be reviewed by the owner) |
+| 9 | Islands: two-sided, seating overhang, front marker | Medium–Large | Done (reworked by #15) |
 | 10 | Connect walls: corner dragging and partition walls (T-joints) | Medium–Large | Done |
+| 11 | Dishwasher: integrated or visible | Small | Done |
+| 12 | Realistic appliances (like the fridge) | Medium | Done |
+| 13 | Catalog groups that open on click | Small | Done |
+| 14 | Island designer: a full-screen editor with four views | Large | Replaced by #15 |
+| 15 | Islands edited in the plan, countertop first, with aisle distances | Large | Done |
 
 ## Details
 
@@ -262,6 +267,10 @@ Each phase gets its own handoff for review.
 - **Seating overhang:** a countertop overhang with stools on one side, plus its support rule (R13: an overhang over 30 cm needs support).
 - **Front marker:** the plan shows which side the cabinets face (UI review finding #21).
 
+**Decided (Q5, 2026-11-07; PROJECT.md decision 14):** back-to-back toggle; seating on either long side; arrow + side labels.
+
+**Done when:** an island can be switched to two-sided with cabinets and an elevation on each side; a seating overhang with stools can be put on its front or back; R13 flags an unsupported overhang over 30 cm; the plan shows the front arrow and A/B labels; plan, 3D, rules, export and save/load handle all of it; old projects load unchanged.
+
 ### 10. Connect walls by their ends
 
 **What (owner, 2026-11-07):** connect walls together, both from the ends of each wall and from the end of one wall to another wall.
@@ -346,6 +355,159 @@ Each phase gets its own handoff for review.
 - The partition's two faces are the same "two-sided run" idea as the two-sided island in #9; build it once and reuse it there.
 - Its footprint on the host wall works like the column / pipe box element in #6 phase 2.
 
+**#15 handoff (2026-11-21, `feat/9-islands`):**
+- **What changed:**
+  - **One screen:** clicking an island's tab (or "+ Add Island") switches to Split, with the plan above and the elevation of the island side being worked on below. The right panel becomes the **island panel**, with numbered steps and a hint each:
+    1. Countertop: length, depth, turn 90°.
+    2. Cabinets: pick Front / Back / Left end / Right end, then add from the catalog.
+    3. Seating: Bar stool / Counter stool, and how much countertop is past the cabinets on that side.
+    4. Ends: None / Plain end panel / Waterfall.
+  - **Starting point:** an empty island offers four layouts (Cabinets only; Cabinets + seating; Cabinets on both sides; Seating + waterfall ends).
+  - **Model** (`lib/plan.ts`): the island is its countertop (side A's length × depth). Each side's cabinets stand under it with their fronts 2 cm inside that edge (`islandSideFrame`). The **overhang is computed** (`islandOverhangs`): the countertop with no cabinets under it, along each edge. The typed `overhangCm` field is gone.
+  - **Drawing:** the plan draws the island as one countertop, with the overhanging parts shaded and labelled. The elevation of an island side has no wall or ceiling and draws the countertop right across. 3D builds one countertop slab per island, the end profiles and the chairs.
+  - **Aisles** (`islandClearances`): dashed lines in the plan from each edge of the island to the nearest cabinet front, other island, partition or wall, labelled in cm, amber under 105 and red under 90. They're also listed in the island panel.
+  - **R13:** an overhang over 30 cm on the front or back (unless both ends are waterfalls) or at an end is an error. On the front or back, the fix makes the island less deep. New **NO KNEE ROOM** warning: chairs on a side with less than 25 cm of countertop past the cabinets.
+  - **Chairs** are in the main catalog ("Chairs" group). They're refused off islands, with a message.
+  - **Removed:** the full-screen island designer (#14) and its arrows and side map.
+- **How to check:** "+ Add Island", then pick "Cabinets + seating". Click Back in the island panel to see the chairs' elevation, read the aisle lines in the plan, try "Seating + waterfall ends", then 3D.
+- **Checked:**
+  - 195 frontend tests (island tests rewritten for the countertop model) and 12 backend tests. Typecheck, lint (no new warnings), format and build pass.
+  - In the isolated app (Playwright MCP, 5199/8765): Add Island, the seating layout, the Back side's elevation, the aisle distances (back 45 / ends 80 / front 103 with wall cabinets on the north wall) and 3D. No page errors.
+- **Known limits:**
+  - Cabinets of different depths on one side line up at the back, so a shallower unit's front sits further in.
+  - Aisles are measured from the countertop edge, not from the chairs.
+  - The plan's aisle lines show for every island all the time (no on/off yet).
+
+### 11. Dishwasher: integrated or visible
+
+**What (owner, 2026-11-07):** the dishwasher has two options, integrated or not.
+**Decided:** new dishwashers are **Integrated** (hidden behind a cabinet front, as now); the Inspector switches to **Visible** (stainless front with a control panel).
+**Done when:** the choice is in the Inspector, drawn in the elevation, plan and 3D, saved, and listed in the schedule.
+
+### 12. Realistic appliances
+
+**What (owner, 2026-11-07):** all the appliances should look more realistic, like the fridge.
+**Plan:** the same treatment the fridge got: under-counter oven, built-in oven / microwave / coffee zones, dishwasher (visible), washing machine, cooktop (electric, induction, gas), range hood, sink, water bar and coffee machine get appliance details in the elevation (glass, control panels, handles, rings, grates) and realistic materials in 3D (stainless, glass, black glass), following decision "Realistic materials in 3D only" for the cabinet fronts.
+**Done when:** each appliance is recognisable at a glance in the elevation and 3D.
+
+### 13. Catalog groups that open on click
+
+**What (owner, 2026-11-07):** the catalog's groups (cabinets, appliances and more) start closed; clicking a group opens it so you can add from its list.
+**Done when:** groups open and close on click, start closed, and the open ones are remembered per browser.
+
+### 14. Island designer
+
+**What (owner, 2026-11-07):** choosing an island opens a window just for designing it, seen from the front, with arrows to switch between its four views, where chairs, cabinets, open shelves and the side profiles (where the chairs are) can be added and edited.
+
+**Decided (Q6, owner in chat, 2026-11-07; PROJECT.md decision 15):**
+- **Full-screen panel in the app:** choosing an island's tab (or double-clicking it in the plan) opens the Island designer over the app, with its own catalog and Inspector; Close returns. Undo and save work as usual.
+- **Four views** with arrows: Front (side A), Right end, Back (side B), Left end. Each is an editable elevation.
+- **Ends** can hold open shelves or a shallow cabinet, and have a **profile**: none, **Plain end panel** or **Waterfall**.
+- **Chairs are elements:** bar (seat 75) or counter (seat 65), dragged along the side; new ones space themselves 60 cm apart. Adding a chair to a side gives it a 30 cm overhang if it has none.
+
+**Replaces** #9's "Two-sided" tickbox and Seating / Overhang / Supported settings: every side is designed in the designer instead.
+
+### 15. Islands edited in the plan, countertop first
+
+**What (owner, 2026-11-21):** the island designer was unclear ("I didn't understand what I should do at all"). Edit the island in the main plan, on one screen, built around its countertop, and show the distance between the island and the kitchen units.
+
+**Decided (Q7, owner in chat, 2026-11-21; PROJECT.md decision 16):**
+- **In the main plan, one screen:** selecting an island shows the plan with the island, the elevation of the side being worked on below it, and an **island panel** that leads through the steps: countertop → cabinets (choose the side: Front / Back / Left end / Right end) → seating (chairs) → ends (None / Plain end panel / Waterfall), with a short hint at each step. The full-screen designer goes away.
+- **Countertop first:** the island is its countertop (length × depth). Cabinets stand under it against one of its edges; the **overhang** is whatever countertop has nothing under it, worked out, not typed. R13 checks it.
+- **Layouts:** a new island offers ready layouts (cabinets only; cabinets + seating; both sides; seating + waterfall ends).
+- **Distances:** the plan shows the distance from each side of the island to whatever faces it (cabinet fronts, or the wall), amber under 105 cm and red under 90 cm.
+
+**Done when:** a first-time user can add an island from a layout and change it without explanation; the overhang follows from the countertop and the cabinets; the aisle distances show in the plan; plan, elevation, 3D, rules, export and save/load handle it.
+
+## Handoff: #11–#14 on `feat/9-islands` (2026-11-07)
+
+**#11 Dishwasher:** Inspector → Dishwasher → Front: **Integrated (cabinet front)** (default) or **Visible (stainless)**. The visible one has a stainless door, a black-glass control strip and a bar handle in 3D, and a control strip with a display and a bar handle in the elevation. It's listed in the schedule. Field `dishwasherFront`.
+
+**#12 Realistic appliances** (3D finishes; appliance details in the elevation, like the fridge):
+- **Ovens** (under-counter, and the oven zone of a tall cabinet): black-glass control strip with a display and knobs, steel door with a glass window, chrome bar handle on stand-offs.
+- **Microwave zone:** glass door with a control column. **Coffee zone:** steel with a display and a cup recess.
+- **Washing machine:** gloss white body, control strip with a dial and display, chrome door ring around dark glass.
+- **Cooktop:** black glass with heating zones (electric, induction), or steel with cast-iron grates and burner caps (gas).
+- **Range hood:** slim T-shaped steel canopy with a light strip and filters, and a chimney to the ceiling.
+- **Sink:** stainless bowls with drains, chrome tap. **Pull-out trash:** cabinet front with a handle.
+
+**#13 Catalog:** groups start closed. Clicking a group opens it (with an item count), and the open groups are remembered per browser.
+
+**#14 Island designer** (decision 15):
+- **Opening it:** clicking an island's tab (or the "Design island" button, or double-clicking the island in the plan) opens a full-screen designer. ◀ ▶ switch between **Front, Right end, Back, Left end**, and a small top view shows which side you're looking at.
+- **Each side** is an editable elevation with the Inspector, and a catalog without wall-only elements, plus **Chairs** (Bar stool, seat 75 / Counter stool, seat 65).
+- **Ends:** **Profile** None / Plain end panel / Waterfall (drawn in the plan, 3D and the end view).
+- **Every side:** an **Overhang** field. Adding a chair gives the side a 30 cm overhang, and chairs space themselves 60 cm apart.
+- **Model:** the back and ends are island runs derived from side A (`face` 'b' / 'left' / 'right'), created on first use, with no tabs of their own. Their depth is that of their cabinets. Overhangs are per side, and profiles are on side A.
+- **R13:** an overhang over 30 cm past the cabinets on the front or back is flagged unless both ends are waterfalls. On an end, it is always flagged. The fix shortens the overhang.
+- **Replaced:** #9's Two-sided / Seating / Supported settings are gone (they never reached `main`).
+
+**Checked:**
+- 195 frontend tests (island tests rewritten for four sides; Hebrew complete) and 12 backend tests. Typecheck, lint (no new warnings), format and build pass.
+- In the isolated app: the collapsed catalog; every appliance in the elevation and in 3D; the designer (cabinets on the front, a waterfall on the right end, three bar stools on the back with a 30 cm overhang, a waterfall on the left end, then the plan and 3D from both sides).
+
+**Known limits:**
+- A side's elevation doesn't show the overhanging countertop above the chairs (only the plan and 3D do).
+- Chairs show only on islands.
+- The island's front overhang still counts island depth without cabinets (as in R15).
+
+## Combined handoff: `feat/9-islands` (2026-11-07)
+
+The owner asked for all open features on one branch (2026-11-07): **#9 islands, #6 phase 2, #5 phases C and D, #8 Hebrew/English**. One review for all four.
+
+**#9 Islands** (decision 14, Q5):
+- **Two-sided:** "Two-sided" in the island settings adds side B, back to back behind side A. It has its own tab ("Island · B"), elevation and cabinets.
+  - Side B is an island run (`face: 'b'`, `hostId` = side A) whose position, length and rotation are derived from side A by `syncIslandBacks` on every edit. Its depth is its own (default 60, "Depth (side B)").
+  - Dragging side B moves the island. Unticking removes side B (asks if it has cabinets).
+- **Seating overhang:** Seating None / Front / Back, Overhang (default 30 cm), Supported.
+  - The slab is measured from the cabinet fronts on that side: front = past side A's fronts; back = past its backs, or past side B's fronts.
+  - Stools every 60 cm in the plan and 3D (`islandSeating`).
+  - **R13** (red): an unsupported overhang over 30 cm, with a fix "Make the overhang 30 cm".
+- **Front marker** (UI review #21): an arrow outside each island's front edge, and A / B labels on a two-sided island. The size label moved to the island's side.
+- **Whole-island footprint:** side B and the seating count for OUTSIDE ROOM, clashes, door swings, R17 "island in the way", keeping the island inside the room, and the resize warning (`islandFootprint`).
+
+**#6 phase 2:**
+- **Niches:** "+ Niche" on a wall tab cuts a 100 × 30 cm recess in the middle of the wall (`nicheOutline`, `addNiche`). The wall becomes five walls, adjusted like any other (drag in the plan, or lengths in the Room bar).
+  - Cabinets and partitions keep their physical place: before the niche, in it (onto the niche's back wall), or after it (onto the new wall).
+  - Default names are re-lettered; renamed walls keep their names.
+- **Column / pipe box** (`column`, catalog group "Room"): Column 30 × 30 and Pipe box 20 × 20, full height by default.
+  - Width, depth, Y and height are all free. It is in the upper layer, so it collides with whatever it reaches: a pipe box at the ceiling doesn't hit the base units below.
+  - Walls and partitions only. Drawn hatched in the elevation, plan and 3D.
+
+**#5 phase C:**
+- **New elements:** Dishwasher (60 × 87), Pull-out Trash (45 × 87), Range Hood (60 × 50 @ 155, with a chimney to the ceiling) and End Panel (2 × 87). The dishwasher, trash and end panel carry the countertop.
+- **New options:** cooktop type (Electric / Induction / Gas), and hinges for a top/bottom (single-door) fridge.
+- **Rules:**
+  - R1: the dishwasher and trash count as pull-outs.
+  - R8: hoods count, and gas needs 75 cm.
+  - New: R3 dishwasher corner trap, R10 no end panel, R12 dishwasher far from sink / across a corner, R16 fridge opens away (fix: flip the hinge), R19 trash/dishwasher/sink.
+- **Phase D:** R13, see #9.
+
+**#8 Hebrew / English** (decisions 2026-11-04):
+- **Toggle:** a "עברית / English" button in the header, remembered per browser (localStorage).
+- **Hebrew layout:** the page turns right-to-left; the plan, elevation and print drawings stay left-to-right.
+- **How it works:** every text goes through `t('English', vars)` (`lib/i18n.ts`). The Hebrew is in `lib/i18n.he.ts` (about 400 entries, **drafted by Claude for the owner to review**).
+- **Default names** ("Wall A", "Island", "Partition 1") show translated; names you typed stay as typed.
+- **Covered:** the interface, element names, all rule messages, badges and fixes, drawing labels, the print/PDF sheets, the Electrical Schedule, PNG headings and error messages.
+- **Test:** `i18n.test.ts` scans the source for every shown text and fails if one has no Hebrew, or if a placeholder doesn't match.
+
+**How to check:**
+- **Islands:** Add Island, tick Two-sided, add cabinets on both sides, set Seating to Back and the overhang to 40 (OVERHANG), then open 3D.
+- **Niches and columns:** on Wall A click "+ Niche" and drag the niche's walls; add a Column and a Pipe box.
+- **Phase C:** add a dishwasher on an island end (NO END PANEL), set a cooktop to gas under a hood, put a dishwasher and trash on the same side of a sink.
+- **Hebrew:** click "עברית" and go through every view and Print / PDF.
+
+**Checked:**
+- 192 frontend tests (new: `island.test.ts` 8, `niche.test.ts` 4, `rules/phaseC.test.ts` 7, `i18n.test.ts` 3) and 12 backend tests. Typecheck, lint, format and build pass.
+- In the isolated app (Playwright MCP, 5199/8765): islands (two-sided, seating, stools, arrows, OVERHANG, 3D), niche and column (plan, elevation), the new elements (elevation, 3D, R19), and Hebrew (right-to-left layout, drawings not mirrored, remembered after reload). No page errors.
+
+**Known limits:**
+- A rectangle with a niche shows the "U-shape" chip: a niche is a U-notch turned outward, and both have 8 corners.
+- There's no "remove niche" yet: use Undo, or a shape preset.
+- The seating overhang isn't drawn in the elevation (it points at the viewer).
+- R13 checks only the seating overhang, not open spans under a countertop.
+- Hebrew: the interface spacing classes aren't mirrored everywhere (a few margins stay physical), and the Hebrew terms need the owner's review.
+
 ## Change log
 
 - 2026-10-27: File created.
@@ -383,3 +545,13 @@ Each phase gets its own handoff for review.
 - 2026-11-07: #10 phase B (partition walls) built and checked; In review on `feat/10-partition-walls`.
 - 2026-11-07: #10 phase B: review findings R12–R14 fixed (filler fix stays within a stretch; aisle, work triangle and door swing see partitions; room changes respect and warn about partitions). 170 frontend tests pass.
 - 2026-11-07: #10 phase B merged into `main` (owner approved); #10 Done.
+- 2026-11-07: #9 started on `feat/9-islands` (owner decisions Q5).
+- 2026-11-07: Owner asked for all open features on `feat/9-islands`. Built #9 islands, #6 phase 2 (niches, column / pipe box), #5 phases C + D (new elements, R3/R8/R10/R12/R13/R16/R19) and #8 Hebrew/English; In review together.
+- 2026-11-07: `feat/9-islands`: review findings R15–R17 fixed (seating measured from the cabinets, R13 on the real cantilever, island deletion, columns in fixes/rules, niche overlap warning, i18n gaps). 197 frontend tests pass.
+- 2026-11-07: Added #11–#14 (owner); decisions recorded (Q6). Built on `feat/9-islands` with the rest.
+- 2026-11-07: #11–#14 built on `feat/9-islands`; In review.
+- 2026-11-08: #14 review findings R18–R20 fixed (selection across island sides, chairs' plan footprint and clashes, island front countertop and chair overhang). 198 frontend tests pass.
+- 2026-11-21: #15 (owner): islands edited in the plan, countertop first, with aisle distances; replaces #14's designer. Started on `feat/9-islands`.
+- 2026-11-21: #15 built on `feat/9-islands` (island panel, countertop-first model, aisle distances); the #14 designer removed. In review.
+- 2026-11-21: #15 review findings R21–R23 fixed. 198 frontend tests pass.
+- 2026-11-21: `feat/9-islands` merged into `main` (owner approved): #5 phases C + D, #6 phase 2, #8, #9, #11–#13 and #15 Done; #14 was replaced by #15.

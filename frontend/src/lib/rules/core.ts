@@ -3,6 +3,7 @@ import type { KitchenItem, ProjectData, WallRun } from '../../types';
 import { CATEGORY_LABELS } from '../defaults';
 import { fmt, fridgeDoors, layerOf } from '../geometry';
 import { runEnds, WALL_THICKNESS_CM, type Rect } from '../plan';
+import { runName, t } from '../i18n';
 
 /** error = physical conflict (red frame) · warning = good-practice guideline (amber frame) · info = list only. */
 export type Severity = 'error' | 'warning' | 'info';
@@ -39,8 +40,9 @@ export interface Rule {
   check: (ctx: RuleContext) => Violation[];
 }
 
-export const itemName = (i: KitchenItem) => i.label || CATEGORY_LABELS[i.category];
-export const at = (run: WallRun, i: KitchenItem) => `${itemName(i)} on ${run.name} (X ${fmt(i.x)})`;
+export const itemName = (i: KitchenItem) => t(i.label || CATEGORY_LABELS[i.category]);
+export const at = (run: WallRun, i: KitchenItem) =>
+  t('{item} on {run} (X {x})', { item: itemName(i), run: runName(run.name), x: fmt(i.x) });
 export const ref = (run: WallRun, i: KitchenItem) => ({ runId: run.id, itemId: i.id });
 
 /** Applies `check` to every run; for rules that only look at one run at a time. */
@@ -144,6 +146,8 @@ export const cornerDepth = (c: Corner) => Math.max(0, ...cornerUnits(c).map((i) 
 /** Fronts that pull straight out (drawers, oven doors). */
 export const isPullOut = (i: KitchenItem) =>
   i.category === 'under_counter_oven' ||
+  i.category === 'dishwasher' ||
+  i.category === 'trash_cabinet' ||
   (i.category === 'base_cabinet' && i.frontType === 'drawers') ||
   (i.category === 'tall_cabinet' && (i.tallZones ?? []).some((z) => z.type === 'drawers' || z.type === 'oven'));
 
@@ -153,7 +157,7 @@ export const hasOvenZone = (i: KitchenItem) =>
 /** Edges of the item (start = its left edge, end = its right edge) where a door is hinged. */
 export function hingeEdges(i: KitchenItem): End[] {
   if (i.category === 'fridge') {
-    const doors = fridgeDoors(i.fridgeType);
+    const doors = fridgeDoors(i.fridgeType, i.doorHinge);
     return [
       ...(doors.some((d) => d.hinge === 'left' && d.fx0 === 0) ? (['start'] as const) : []),
       ...(doors.some((d) => d.hinge === 'right' && d.fx1 === 1) ? (['end'] as const) : []),
@@ -179,10 +183,14 @@ export function openReach(i: KitchenItem): number {
         ),
       );
     case 'fridge':
-      return Math.max(...fridgeDoors(i.fridgeType).map((d) => (d.fx1 - d.fx0) * i.width));
+      return Math.max(...fridgeDoors(i.fridgeType, i.doorHinge).map((d) => (d.fx1 - d.fx0) * i.width));
     case 'under_counter_oven':
     case 'washing_machine':
       return 50;
+    case 'dishwasher':
+      return i.depth; // the door drops open to about its own depth
+    case 'trash_cabinet':
+      return drawer;
     default:
       return 0;
   }

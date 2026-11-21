@@ -53,10 +53,19 @@ describe('islands', () => {
     expect(islandRect({ ...island, rotationDeg: 90 })).toEqual({ x: 10, y: 20, w: 90, h: 200 });
   });
 
-  it('places island items relative to the island footprint', () => {
-    const island = { ...createIsland(room, []), planX: 100, planY: 100, rotationDeg: 0 as const };
+  it('places island cabinets under the countertop, fronts just inside its front edge (#15)', () => {
+    const unit = item('base_cabinet', { x: 0 });
+    const island = {
+      ...createIsland(room, []),
+      planX: 100,
+      planY: 100,
+      depthCm: 90,
+      rotationDeg: 0 as const,
+      items: [unit],
+    };
     const f = wallFrame(room, island);
-    expect(itemPlanRect(f, item('base_cabinet', { x: 0 }))).toEqual({ x: 100, y: 100, w: 60, h: 60 });
+    // Countertop y 100–190: a 60 cm unit from y 128 to 188, 2 cm inside the front edge.
+    expect(itemPlanRect(f, unit)).toEqual({ x: 100, y: 128, w: 60, h: 60 });
   });
 });
 

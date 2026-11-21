@@ -4,8 +4,9 @@
  */
 import type { KitchenItem, ProjectData, WallRun } from '../../types';
 import { createItem } from '../defaults';
-import { countersOnUnits, fmt, isJoint, layerOf, normalizeWall } from '../geometry';
+import { countersOnUnits, fmt, isRunDivider, layerOf, normalizeWall } from '../geometry';
 import type { End } from './core';
+import { runName, t } from '../i18n';
 
 const right = (i: KitchenItem) => i.x + i.width;
 const isFloor = (i: KitchenItem) => layerOf(i.category) === 'floor' && i.depth > 0;
@@ -19,7 +20,8 @@ const replaceRun = (data: ProjectData, run: WallRun): ProjectData => ({
 
 /** The stretch of a run around [x0, x1] between partition joints (or the run's ends). */
 function stretchAround(run: WallRun, x0: number, x1: number): [number, number] {
-  const joints = run.items.filter(isJoint);
+  // Partition joints and floor-standing columns (review finding R16) split the run.
+  const joints = run.items.filter(isRunDivider);
   const lo = Math.max(0, ...joints.filter((j) => right(j) <= x0 + 0.5).map(right));
   const hi = Math.min(run.widthCm, ...joints.filter((j) => j.x >= x1 - 0.5).map((j) => j.x));
   return [lo, hi];
@@ -105,7 +107,7 @@ export function insertFiller(
   serves?: KitchenItem,
 ): ProjectData | string {
   const run = data.walls.find((w) => w.id === runId);
-  if (!run) return 'that run no longer exists';
+  if (!run) return t('that run no longer exists');
   const [x0, x1] = away === 'end' ? [edge, edge + width] : [edge - width, edge];
   const kept = {
     ...run,
@@ -116,10 +118,14 @@ export function insertFiller(
     const shortfall = Math.ceil(pushed * 10) / 10;
     const narrowed = narrowNearest(kept, edge, shortfall, away);
     if (!narrowed) {
-      return `not enough room on ${run.name}: it needs ${fmt(shortfall)} cm more, and no cabinet there can be narrowed that much (minimum ${MIN_CABINET} cm; appliances are never resized)`;
+      return t(
+        'not enough room on {run}: it needs {shortfall} cm more, and no cabinet there can be narrowed that much (minimum {MIN_CABINET} cm; appliances are never resized)',
+        { run: runName(run.name), shortfall: fmt(shortfall), MIN_CABINET },
+      );
     }
     pushed = pushClear(narrowed, x0, x1, away);
-    if (typeof pushed === 'number') return `not enough room on ${run.name}: it needs ${fmt(pushed)} cm more`;
+    if (typeof pushed === 'number')
+      return t('not enough room on {run}: it needs {pushed} cm more', { run: runName(run.name), pushed: fmt(pushed) });
   }
   const filler: KitchenItem = {
     ...createItem('filler'),
@@ -147,14 +153,18 @@ export function addScribeFiller(
   [lo, hi]: [number, number] = [0, Infinity],
 ): ProjectData | string {
   const run = data.walls.find((w) => w.id === runId);
-  if (!run) return 'that run no longer exists';
+  if (!run) return t('that run no longer exists');
   const end = Math.min(hi, run.widthCm);
   const inStretch = (i: KitchenItem) => i.x >= lo - 0.5 && right(i) <= end + 0.5;
   const target = run.items
     .filter((i) => inStretch(i) && resizable(i) && i.width - needed >= MIN_CABINET)
     .sort((a, b) => b.width - a.width)[0];
   if (!target)
-    return `no cabinet on ${run.name} can be narrowed by ${fmt(needed)} cm (they'd drop below ${MIN_CABINET} cm)`;
+    return t("no cabinet on {run} can be narrowed by {needed} cm (they'd drop below {MIN_CABINET} cm)", {
+      run: runName(run.name),
+      needed: fmt(needed),
+      MIN_CABINET,
+    });
   const ride = riders(run);
   const moved = new Set(
     run.items

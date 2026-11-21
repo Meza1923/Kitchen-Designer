@@ -16,6 +16,15 @@ export type ElementCategory =
   | 'door'
   | 'socket'
   | 'power_socket'
+  /** A chair at an island (#14). */
+  | 'stool'
+  // Phase C of the design rules (#5)
+  | 'dishwasher'
+  | 'trash_cabinet'
+  | 'hood'
+  | 'end_panel'
+  /** Column or pipe box against a wall (FEATURES.md #6 phase 2): any width, depth, Y and height. */
+  | 'column'
   /** Derived, not user-editable: where a partition wall meets its host wall (FEATURES.md #10). */
   | 'partition_joint';
 
@@ -64,18 +73,29 @@ export interface KitchenItem {
 
   // For 'stove'
   burnerCount?: 4 | 5;
+  cooktopType?: 'electric' | 'induction' | 'gas'; // missing means electric (R8: gas needs 75 cm above it)
+
+  // For 'dishwasher' (#11): behind a cabinet front, or its own stainless front. Missing means integrated.
+  dishwasherFront?: 'integrated' | 'visible';
+
+  // For 'stool' (#14): bar stool (seat 75 cm) or counter stool (seat 65 cm). Missing means bar.
+  stoolType?: 'bar' | 'counter';
 
   // For 'fridge' (missing means side-by-side)
   fridgeType?: FridgeType;
 
   // For 'door': hinge side as seen from inside the room, and swing direction.
-  // doorHinge also sets the hinge of a tall cabinet's door zones.
+  // doorHinge also sets the hinge of a tall cabinet's door zones, and of a top/bottom (single-door) fridge.
   doorHinge?: 'left' | 'right';
   doorSwing?: 'in' | 'out';
 
   // For 'socket': outlets on the plate
   socketCount?: 1 | 2 | 3 | 4;
 }
+
+/** A side of an island (#14), or a face of a partition ('a' / 'b'). */
+export type IslandFace = 'a' | 'b' | 'left' | 'right';
+export type EndProfile = 'none' | 'panel' | 'waterfall';
 
 export type WallSide = 'north' | 'east' | 'south' | 'west';
 export type Rotation = 0 | 90 | 180 | 270;
@@ -92,7 +112,7 @@ export interface WallRun {
   countertopThicknessCm: number; // Default 3
   items: KitchenItem[];
 
-  // Islands: footprint top-left in plan (cm), depth and rotation.
+  // Islands (#15): side A holds the countertop — top-left in plan (cm), length (widthCm), depth and rotation.
   // Partition faces: derived from the host (lib/partition.ts): planX/planY = the face's start point, rotationDeg = the
   // direction it runs in (0 = east, 90 = south, 180 = west, 270 = north).
   planX?: number;
@@ -100,11 +120,17 @@ export interface WallRun {
   depthCm?: number;
   rotationDeg?: Rotation;
 
-  // Partition faces only (FEATURES.md #10): a partition wall is two runs, side A and side B, sharing partitionId.
+  // Partition faces (FEATURES.md #10): a partition wall is two runs, side A and side B, sharing partitionId.
+  // Two-sided islands (#9): side B is a second island run with face 'b' and hostId = its side-A island; its
+  // position, length and rotation are derived from side A (lib/plan.ts → syncIslandBacks), its depthCm is its own.
   partitionId?: string;
-  face?: 'a' | 'b';
-  hostId?: string; // the wall it stands on, at 90° (T-joint)
-  hostX?: number; // cm along the host wall to the side-A face
+  face?: IslandFace; // partitions: 'a' / 'b'; islands: 'b' (back), 'left' / 'right' (ends), missing = front
+  hostId?: string; // partition: the wall it stands on, at 90° (T-joint); island side B: its side-A island
+  hostX?: number; // partitions: cm along the host wall to the side-A face
+
+  // Island side A only (#14, #15): the profile at each end of the island. (The overhang is computed.)
+  leftProfile?: EndProfile;
+  rightProfile?: EndProfile;
 }
 
 export interface PlanPoint {

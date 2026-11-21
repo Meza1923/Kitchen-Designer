@@ -75,9 +75,13 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "base_cabinet" | "upper_cabinet" | "tall_cabinet" | "corner_blocker" | "filler" | "shelf" | "fridge" | "washing_machine" | "under_counter_oven" | "sink" | "stove" | "water_bar" | "coffee_machine" | "window" | "door" | "socket" | "power_socket" | "partition_joint";
+            category: "base_cabinet" | "upper_cabinet" | "tall_cabinet" | "corner_blocker" | "filler" | "shelf" | "fridge" | "washing_machine" | "under_counter_oven" | "sink" | "stove" | "water_bar" | "coffee_machine" | "window" | "door" | "socket" | "power_socket" | "dishwasher" | "trash_cabinet" | "hood" | "end_panel" | "stool" | "column" | "partition_joint";
+            /** Cooktoptype */
+            cooktopType?: ("electric" | "induction" | "gas") | null;
             /** Depth */
             depth?: number | null;
+            /** Dishwasherfront */
+            dishwasherFront?: ("integrated" | "visible") | null;
             /**
              * Doorcount
              * @default 1
@@ -124,6 +128,8 @@ export interface components {
             sinkBowls?: (1 | 2) | null;
             /** Socketcount */
             socketCount?: (1 | 2 | 3 | 4) | null;
+            /** Stooltype */
+            stoolType?: ("bar" | "counter") | null;
             /** Tallzones */
             tallZones?: components["schemas"]["TallZoneConfig"][] | null;
             /**
@@ -265,7 +271,7 @@ export interface components {
             /** Depthcm */
             depthCm?: number | null;
             /** Face */
-            face?: ("a" | "b") | null;
+            face?: ("a" | "b" | "left" | "right") | null;
             /**
              * Heightcm
              * @default 260
@@ -285,6 +291,8 @@ export interface components {
              * @enum {string}
              */
             kind: "wall" | "island" | "partition";
+            /** Leftprofile */
+            leftProfile?: ("none" | "panel" | "waterfall") | null;
             /** Name */
             name: string;
             /** Partitionid */
@@ -295,6 +303,8 @@ export interface components {
             planY?: number | null;
             /** Removed */
             removed?: boolean | null;
+            /** Rightprofile */
+            rightProfile?: ("none" | "panel" | "waterfall") | null;
             /** Rotationdeg */
             rotationDeg?: (0 | 90 | 180 | 270) | null;
             /** Segment */
@@ -317,7 +327,7 @@ export interface components {
             /** Depthcm */
             depthCm?: number | null;
             /** Face */
-            face?: ("a" | "b") | null;
+            face?: ("a" | "b" | "left" | "right") | null;
             /**
              * Heightcm
              * @default 260
@@ -337,6 +347,8 @@ export interface components {
              * @enum {string}
              */
             kind: "wall" | "island" | "partition";
+            /** Leftprofile */
+            leftProfile?: ("none" | "panel" | "waterfall") | null;
             /** Name */
             name: string;
             /** Partitionid */
@@ -347,6 +359,8 @@ export interface components {
             planY?: number | null;
             /** Removed */
             removed?: boolean | null;
+            /** Rightprofile */
+            rightProfile?: ("none" | "panel" | "waterfall") | null;
             /** Rotationdeg */
             rotationDeg?: (0 | 90 | 180 | 270) | null;
             /** Segment */

@@ -22,6 +22,12 @@ ElementCategory = Literal[
     "door",
     "socket",
     "power_socket",
+    "dishwasher",
+    "trash_cabinet",
+    "hood",
+    "end_panel",
+    "stool",  # island designer (#14): a chair at the island
+    "column",  # column or pipe box standing against a wall (#6 phase 2)
     "partition_joint",  # derived: where a partition wall meets its host wall (#10); not user-editable
 ]
 TallZoneType = Literal["door", "drawers", "oven", "microwave", "coffee", "open"]
@@ -56,6 +62,9 @@ class KitchenItem(BaseModel):
     sinkBowls: Optional[Literal[1, 2]] = None
     hasFaucet: Optional[bool] = None
     burnerCount: Optional[Literal[4, 5]] = None
+    cooktopType: Optional[Literal["electric", "induction", "gas"]] = None  # stove; missing means electric
+    dishwasherFront: Optional[Literal["integrated", "visible"]] = None  # dishwasher; missing means integrated
+    stoolType: Optional[Literal["bar", "counter"]] = None  # stool: seat 75 (bar) or 65 (counter); missing means bar
     fridgeType: Optional[FridgeType] = None  # missing means side-by-side
     doorHinge: Optional[Literal["left", "right"]] = None
     doorSwing: Optional[Literal["in", "out"]] = None
@@ -80,9 +89,13 @@ class WallRun(BaseModel):
     rotationDeg: Optional[Literal[0, 90, 180, 270]] = None
     # Partition faces only (#10): both faces of one partition share partitionId and the host geometry.
     partitionId: Optional[str] = None
-    face: Optional[Literal["a", "b"]] = None
-    hostId: Optional[str] = None  # the wall it stands on (T-joint)
+    # Partitions: which face. Islands (#14): side "b" (back), "left" / "right" ends; missing or "a" is the front.
+    face: Optional[Literal["a", "b", "left", "right"]] = None
+    hostId: Optional[str] = None  # partition: the wall it stands on (T-joint); island side B: its side-A island
     hostX: Optional[float] = None  # cm along the host wall to the partition's side-A face
+    # Islands (#15): end profiles on side A (the overhang is computed from the countertop and the cabinets)
+    leftProfile: Optional[Literal["none", "panel", "waterfall"]] = None
+    rightProfile: Optional[Literal["none", "panel", "waterfall"]] = None
 
 
 class PlanPoint(BaseModel):

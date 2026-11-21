@@ -1,5 +1,6 @@
 import { AlertTriangle, Info, OctagonAlert, Wrench } from 'lucide-react';
 import type { Violation } from '../lib/rules';
+import { t } from '../lib/i18n';
 
 const STYLE = {
   error: { icon: OctagonAlert, text: 'text-red-700', box: 'border-red-200 bg-red-50' },
@@ -30,7 +31,7 @@ export function ProblemsList({
   return (
     <div className="mb-3">
       <h3 className="mb-1.5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-700">
-        {title}
+        {t(title)}
         {counts.map(([s, n]) => (
           <span key={s} className={`rounded px-1.5 py-px text-[10px] ${STYLE[s].box} ${STYLE[s].text}`}>
             {n}
@@ -39,7 +40,7 @@ export function ProblemsList({
       </h3>
       {onFixAll && violations.some((v) => v.fix) && (
         <button type="button" className="btn mb-1.5 w-full justify-center text-xs" onClick={onFixAll}>
-          <Wrench size={13} /> Add all needed fillers
+          <Wrench size={13} /> {t('Add all needed fillers')}
         </button>
       )}
       <div className="space-y-1">

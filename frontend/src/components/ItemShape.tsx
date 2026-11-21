@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { KitchenItem, TallZoneConfig } from '../types';
 import { boxHeight, fmt, fridgeDoors, layerOf, toScreenY } from '../lib/geometry';
+import { t } from '../lib/i18n';
 
 export const INK = '#1e293b';
 export const THIN = '#475569';
@@ -75,8 +76,25 @@ const Txt = ({
     dominantBaseline="middle"
     style={{ pointerEvents: 'none', userSelect: 'none' }}
   >
-    {children}
+    {typeof children === 'string' ? t(children.trim()) : children}
   </text>
+);
+
+/** Appliance bar handle (like the fridge's): a rounded tube on two stand-offs, horizontal from x0 to x1. */
+function HBar({ x0, x1, y, bar = 3.5 }: { x0: number; x1: number; y: number; bar?: number }) {
+  return (
+    <g>
+      {[x0 + 2, x1 - 2].map((sx) => (
+        <line key={sx} x1={sx} y1={y - 1} x2={sx} y2={y + bar + 1} stroke={INK} strokeWidth={1.5} />
+      ))}
+      <rect x={x0} y={y} width={x1 - x0} height={bar} rx={bar / 2} fill="#e2e8f0" stroke={INK} strokeWidth={1.25} />
+    </g>
+  );
+}
+
+/** A small control display (dark screen) centred at cx in a control strip. */
+const Display = ({ cx, cy, w, h }: { cx: number; cy: number; w: number; h: number }) => (
+  <rect x={cx - w / 2} y={cy - h / 2} width={w} height={h} rx={1.5} fill="#1e293b" stroke={INK} strokeWidth={0.75} />
 );
 
 function Door({ b, hinge, handleAt }: { b: Box; hinge: 'left' | 'right'; handleAt: 'top' | 'bottom' | 'middle' }) {
@@ -360,14 +378,7 @@ function TallZone({ zone, b, scale, hinge }: { zone: TallZoneConfig; b: Box; sca
           {[0.2, 0.8].map((f) => (
             <circle key={f} cx={b.x + b.w * f} cy={b.y + strip / 2} r={Math.min(3, strip / 3)} {...LINE} />
           ))}
-          <line
-            x1={b.x + b.w * 0.2}
-            y1={b.y + strip + 6}
-            x2={b.x + b.w * 0.8}
-            y2={b.y + strip + 6}
-            stroke={INK}
-            strokeWidth={2}
-          />
+          <HBar x0={b.x + b.w * 0.15} x1={b.x + b.w * 0.85} y={b.y + strip + 3} bar={3} />
           {win.h > 6 && (
             <rect
               x={win.x}
@@ -380,9 +391,7 @@ function TallZone({ zone, b, scale, hinge }: { zone: TallZoneConfig; b: Box; sca
               strokeWidth={1}
             />
           )}
-          <Txt x={cx} y={b.y + strip / 2} size={8} weight={700}>
-            OVEN
-          </Txt>
+          <Display cx={cx} cy={b.y + strip / 2} w={Math.min(b.w * 0.3, 22)} h={Math.min(strip * 0.55, 7)} />
         </g>
       );
     }
@@ -460,6 +469,144 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
         </g>
       );
     }
+    case 'stool': {
+      // A chair at the island (#14), side view: round seat, a column, a foot ring and a round base.
+      const seat = Math.min(5, ob.h * 0.08);
+      const ring = ob.y + ob.h * 0.62;
+      return (
+        <g>
+          <rect
+            x={ob.x}
+            y={ob.y}
+            width={ob.w}
+            height={seat}
+            rx={seat / 2}
+            fill="#334155"
+            stroke={INK}
+            strokeWidth={1.25}
+          />
+          <line x1={cx} y1={ob.y + seat} x2={cx} y2={ob.y + ob.h - 2} stroke={INK} strokeWidth={2} />
+          <line x1={ob.x + ob.w * 0.18} y1={ring} x2={ob.x + ob.w * 0.82} y2={ring} stroke={INK} strokeWidth={1.5} />
+          <rect x={ob.x + ob.w * 0.12} y={ob.y + ob.h - 2} width={ob.w * 0.76} height={2} rx={1} fill={INK} />
+        </g>
+      );
+    }
+    case 'dishwasher':
+    case 'trash_cabinet': {
+      // One full-height front with a bar handle along the top (dishwasher: integrated panel; trash: pull-out).
+      const { outer, fronts, plinth } = frontsBox(item, ctx);
+      const dw = item.category === 'dishwasher';
+      if (dw && item.dishwasherFront === 'visible') {
+        // Its own appliance door (#11): rounded, a control strip with a display and a bar handle, like the fridge.
+        const strip = Math.min(fronts.h * 0.13, 16);
+        return (
+          <g>
+            <rect x={outer.x} y={outer.y} width={outer.w} height={outer.h - plinth} rx={3} {...OUTLINE} />
+            <Plinth x={outer.x} w={outer.w} bottom={outer.y + outer.h} h={plinth} />
+            <rect
+              x={fronts.x}
+              y={fronts.y}
+              width={fronts.w}
+              height={strip}
+              rx={2}
+              fill="#334155"
+              stroke={INK}
+              strokeWidth={1}
+            />
+            <Display
+              cx={fronts.x + fronts.w * 0.72}
+              cy={fronts.y + strip / 2}
+              w={Math.min(fronts.w * 0.3, 22)}
+              h={Math.min(strip * 0.5, 7)}
+            />
+            <rect
+              x={fronts.x}
+              y={fronts.y + strip + 1}
+              width={fronts.w}
+              height={fronts.h - strip - 1}
+              rx={3}
+              fill="#f8fafc"
+              stroke={INK}
+              strokeWidth={1.25}
+            />
+            <HBar x0={fronts.x + fronts.w * 0.2} x1={fronts.x + fronts.w * 0.8} y={fronts.y + strip + 5} />
+            <Txt x={cx} y={fronts.y + fronts.h * 0.6} size={8} weight={700}>
+              DW
+            </Txt>
+          </g>
+        );
+      }
+      return (
+        <g>
+          <rect x={outer.x} y={outer.y} width={outer.w} height={outer.h - plinth} {...OUTLINE} />
+          <Plinth x={outer.x} w={outer.w} bottom={outer.y + outer.h} h={plinth} />
+          <rect x={fronts.x} y={fronts.y} width={fronts.w} height={fronts.h} {...LINE} />
+          <line
+            x1={fronts.x + fronts.w * 0.25}
+            y1={fronts.y + 6}
+            x2={fronts.x + fronts.w * 0.75}
+            y2={fronts.y + 6}
+            stroke={INK}
+            strokeWidth={2.5}
+          />
+          {dw && <line x1={fronts.x} y1={fronts.y + 14} x2={fronts.x + fronts.w} y2={fronts.y + 14} {...HIDDEN} />}
+          <Txt x={cx} y={fronts.y + fronts.h / 2 + 3} size={8} weight={700}>
+            {dw ? 'DW' : 'TRASH'}
+          </Txt>
+        </g>
+      );
+    }
+    case 'end_panel':
+      // A plain side panel closing the end of a run.
+      return <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} fill="#e2e8f0" stroke={INK} strokeWidth={1.75} />;
+    case 'hood': {
+      // Chimney hood: a canopy (the element) and its chimney up to the ceiling.
+      const chimneyW = ob.w * 0.36;
+      return (
+        <g>
+          {ob.y > 0 && (
+            <rect
+              x={cx - chimneyW / 2}
+              y={0}
+              width={chimneyW}
+              height={ob.y + ob.h * 0.4}
+              {...LINE}
+              strokeDasharray="6 3"
+            />
+          )}
+          <polygon
+            points={`${cx - chimneyW / 2},${ob.y} ${cx + chimneyW / 2},${ob.y} ${ob.x + ob.w},${ob.y + ob.h * 0.75} ${ob.x + ob.w},${ob.y + ob.h} ${ob.x},${ob.y + ob.h} ${ob.x},${ob.y + ob.h * 0.75}`}
+            {...OUTLINE}
+          />
+          <Txt x={cx} y={ob.y + ob.h * 0.62} size={8} weight={700}>
+            HOOD
+          </Txt>
+        </g>
+      );
+    }
+    case 'column':
+      // Column or pipe box (#6 phase 2): a hatched building element, labelled along its long side.
+      return (
+        <g>
+          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} fill="url(#hatch)" stroke={INK} strokeWidth={1.75} />
+          {ob.w >= 14 && ob.h >= 40 && (
+            <g transform={ob.h > ob.w ? `rotate(-90 ${cx} ${ob.y + ob.h / 2})` : undefined}>
+              <rect
+                x={cx - 30}
+                y={ob.y + ob.h / 2 - 7}
+                width={60}
+                height={14}
+                fill="#ffffff"
+                stroke={THIN}
+                strokeWidth={0.75}
+              />
+              <Txt x={cx} y={ob.y + ob.h / 2 + 3} size={7} weight={700}>
+                {item.label ? t(item.label).toUpperCase() : 'COLUMN'}
+              </Txt>
+            </g>
+          )}
+        </g>
+      );
     case 'shelf':
       // Open wall shelf: a floating board on concealed fixings, so nothing is drawn outside its outline.
       return (
@@ -528,7 +675,7 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
       const aw = ob.w - 2 * REVEAL;
       const top = ob.y + REVEAL;
       const h = ob.h - 2 * REVEAL - grille;
-      const doors = fridgeDoors(item.fridgeType).map((d) => {
+      const doors = fridgeDoors(item.fridgeType, item.doorHinge).map((d) => {
         const x = ax + d.fx0 * aw + (d.fx0 > 0 ? gap / 2 : 0);
         const y = top + (1 - d.fy1) * h + (d.fy1 < 1 ? gap / 2 : 0);
         const w = ax + d.fx1 * aw - (d.fx1 < 1 ? gap / 2 : 0) - x;
@@ -612,13 +759,46 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
       const cy = ob.y + panel + bodyH / 2;
       return (
         <g>
-          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} rx={2} {...OUTLINE} />
-          <line x1={ob.x} y1={ob.y + panel} x2={ob.x + ob.w} y2={ob.y + panel} {...LINE} />
-          <rect x={ob.x + 6} y={ob.y + panel / 2 - 3} width={ob.w * 0.3} height={6} {...LINE} />
-          <circle cx={ob.x + ob.w - 12} cy={ob.y + panel / 2} r={Math.min(5, panel / 2.5)} {...LINE} />
-          <circle cx={cx} cy={cy} r={r} fill="#ffffff" stroke={INK} strokeWidth={1.5} />
-          <circle cx={cx} cy={cy} r={r * 0.72} fill="#f1f5f9" stroke={THIN} strokeWidth={1} />
-          <line x1={cx + r * 0.85} y1={cy - 4} x2={cx + r * 0.85} y2={cy + 4} stroke={INK} strokeWidth={2} />
+          {/* Appliance cues (#12): rounded body, a dark control strip with dial and display, a chrome door ring
+              around dark glass, and the door's pull. */}
+          <rect x={ob.x} y={ob.y} width={ob.w} height={ob.h} rx={4} {...OUTLINE} />
+          <rect
+            x={ob.x + 3}
+            y={ob.y + 3}
+            width={ob.w - 6}
+            height={panel - 5}
+            rx={2}
+            fill="#334155"
+            stroke={INK}
+            strokeWidth={1}
+          />
+          <circle
+            cx={ob.x + ob.w * 0.2}
+            cy={ob.y + panel / 2 + 0.5}
+            r={Math.min(5, panel / 3)}
+            fill="#e2e8f0"
+            stroke={INK}
+            strokeWidth={1}
+          />
+          <Display
+            cx={ob.x + ob.w * 0.55}
+            cy={ob.y + panel / 2 + 0.5}
+            w={Math.min(ob.w * 0.28, 22)}
+            h={Math.min(panel * 0.4, 7)}
+          />
+          <circle cx={cx} cy={cy} r={r} fill="#e2e8f0" stroke={INK} strokeWidth={1.75} />
+          <circle cx={cx} cy={cy} r={r * 0.78} fill="#475569" stroke={INK} strokeWidth={1} />
+          <circle cx={cx - r * 0.25} cy={cy - r * 0.25} r={r * 0.22} fill="#64748b" stroke="none" />
+          <rect
+            x={cx + r * 0.88}
+            y={cy - 6}
+            width={4}
+            height={12}
+            rx={2}
+            fill="#e2e8f0"
+            stroke={INK}
+            strokeWidth={1.25}
+          />
         </g>
       );
     }
@@ -641,18 +821,18 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
               {...LINE}
             />
           ))}
-          <Txt x={cx} y={fronts.y + strip / 2} size={8} weight={700}>
-            OVEN
-          </Txt>
-          <rect x={door.x} y={door.y} width={door.w} height={door.h} {...LINE} />
-          <line
-            x1={door.x + door.w * 0.15}
-            y1={door.y + 7}
-            x2={door.x + door.w * 0.85}
-            y2={door.y + 7}
+          <Display cx={cx} cy={fronts.y + strip / 2} w={Math.min(fronts.w * 0.28, 26)} h={Math.min(strip * 0.5, 8)} />
+          <rect
+            x={door.x}
+            y={door.y}
+            width={door.w}
+            height={door.h}
+            rx={3}
+            fill="#f8fafc"
             stroke={INK}
-            strokeWidth={2.5}
+            strokeWidth={1.25}
           />
+          <HBar x0={door.x + door.w * 0.12} x1={door.x + door.w * 0.88} y={door.y + 4} />
           {win.h > 6 && (
             <rect
               x={win.x}
@@ -742,7 +922,7 @@ export function ItemShape({ item, ctx }: { item: KitchenItem; ctx: ShapeContext 
             );
           })}
           <Txt x={cx} y={ob.y - 7} size={7.5}>
-            COOKTOP
+            {{ electric: 'COOKTOP', induction: 'INDUCTION', gas: 'GAS COOKTOP' }[item.cooktopType ?? 'electric']}
           </Txt>
         </g>
       );

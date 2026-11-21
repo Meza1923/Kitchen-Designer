@@ -4,8 +4,20 @@
  */
 import type { ProjectData, WallRun } from '../types';
 import { uid, wallLetter } from './defaults';
-import { bounds, moveWall, roomOutline, segmentIndex, segments, setWallLength, type Pt, type Segment } from './outline';
+import {
+  bounds,
+  moveWall,
+  nicheOutline,
+  roomOutline,
+  segmentIndex,
+  segments,
+  setWallLength,
+  type Pt,
+  type Segment,
+} from './outline';
+import { isJoint } from './geometry';
 import { syncRoom } from './plan';
+import { runName, t } from './i18n';
 
 const DEFAULT_NAME = /^Wall [A-Z]+$/;
 
@@ -86,7 +98,7 @@ export function reshapeRoom(data: ProjectData, outline: Pt[]): { data: ProjectDa
  */
 export function resizeWall(data: ProjectData, wallId: string, length: number): ProjectData | string {
   const wall = data.walls.find((w) => w.id === wallId);
-  if (!wall || wall.kind !== 'wall') return 'that wall no longer exists';
+  if (!wall || wall.kind !== 'wall') return t('that wall no longer exists');
   const result = setWallLength(roomOutline(data.room), segmentIndex(wall), length);
   if (typeof result === 'string') return result;
   // Same corners in the same order: every wall stays on its own segment, only lengths change.
@@ -106,7 +118,7 @@ export function resizeWall(data: ProjectData, wallId: string, length: number): P
  */
 export function dragWall(data: ProjectData, wallId: string, delta: number): { data: ProjectData; shift: Pt } | string {
   const wall = data.walls.find((w) => w.id === wallId);
-  if (!wall || wall.kind !== 'wall') return 'that wall no longer exists';
+  if (!wall || wall.kind !== 'wall') return t('that wall no longer exists');
   return moveSegment(data, segmentIndex(wall), delta);
 }
 
@@ -152,7 +164,7 @@ export function dragCorner(
   intoNext: number,
 ): { data: ProjectData; shift: Pt } | string {
   const n = roomOutline(data.room).length;
-  if (corner < 0 || corner >= n) return 'that corner no longer exists';
+  if (corner < 0 || corner >= n) return t('that corner no longer exists');
   // The two walls are perpendicular, so the moves are independent: each changes the other wall's length only.
   const first = moveSegment(data, (corner + n - 1) % n, intoPrev);
   if (typeof first === 'string') return first;
@@ -162,4 +174,83 @@ export function dragCorner(
     data: second.data,
     shift: { x: first.shift.x + second.shift.x, y: first.shift.y + second.shift.y },
   };
+}
+
+/** Default niche size (cm). */
+export const NICHE_DEFAULT = { width: 100, depth: 30 };
+
+/**
+ * The project with a niche cut into wall `wallId` (FEATURES.md #6 phase 2): `width` cm wide, `x` cm along the wall,
+ * `depth` cm deep. Cabinets and partitions keep their physical place: those before the niche stay on the wall, those
+ * in it go onto the niche's back wall, and those after it onto the new wall after the niche. Islands keep their place
+ * in the room. Default names ("Wall A") are re-lettered in outline order. Returns a sentence when it can't be cut.
+ */
+export function addNiche(
+  data: ProjectData,
+  wallId: string,
+  x: number,
+  width: number,
+  depth: number,
+): ProjectData | string {
+  const wall = data.walls.find((w) => w.id === wallId);
+  if (!wall || wall.kind !== 'wall') return t('select a wall tab first');
+  if (wall.removed) return t('{wall} is an open side: restore it first', { wall: runName(wall.name) });
+  const index = segmentIndex(wall);
+  const result = nicheOutline(roomOutline(data.room), index, x, width, depth);
+  if (typeof result === 'string') return result;
+  const { outline, shift } = result;
+  const fresh = (segment: number): WallRun => ({
+    id: uid(),
+    name: '',
+    kind: 'wall',
+    segment,
+    widthCm: 0,
+    heightCm: data.room.heightCm,
+    countertopThicknessCm: wall.countertopThicknessCm,
+    items: [],
+  });
+  const back = fresh(index + 2);
+  const after = fresh(index + 4);
+  // Where along the old wall something stands decides where it goes (by its centre).
+  const zone = (centre: number) => (centre < x ? 'before' : centre < x + width ? 'niche' : 'after');
+  const own = wall.items.filter((i) => !isJoint(i));
+  for (const i of own) {
+    const z = zone(i.x + i.width / 2);
+    if (z === 'niche') back.items.push({ ...i, x: i.x - x });
+    if (z === 'after') after.items.push({ ...i, x: i.x - x - width });
+  }
+  const walls: WallRun[] = [];
+  for (const w of data.walls) {
+    if (w.id === wall.id) {
+      walls.push({ ...w, items: own.filter((i) => zone(i.x + i.width / 2) === 'before') });
+      walls.push(fresh(index + 1), back, fresh(index + 3), after);
+    } else if (w.kind === 'wall') {
+      const seg = segmentIndex(w);
+      walls.push(seg > index ? { ...w, segment: seg + 4 } : w);
+    } else if (w.kind === 'island') {
+      walls.push({ ...w, planX: (w.planX ?? 0) + shift.x, planY: (w.planY ?? 0) + shift.y });
+    } else if (w.kind === 'partition' && w.hostId === wall.id) {
+      const hx = w.hostX ?? 0;
+      const z = zone(hx + 5);
+      walls.push(
+        z === 'before'
+          ? w
+          : z === 'niche'
+            ? { ...w, hostId: back.id, hostX: hx - x }
+            : { ...w, hostId: after.id, hostX: hx - x - width },
+      );
+    } else walls.push(w);
+  }
+  // Walls in outline order, default names re-lettered.
+  const ordered = [
+    ...walls.filter((w) => w.kind === 'wall').sort((a, b) => segmentIndex(a) - segmentIndex(b)),
+    ...walls.filter((w) => w.kind !== 'wall'),
+  ].map((w) =>
+    w.kind === 'wall' && (!w.name || DEFAULT_NAME.test(w.name))
+      ? { ...w, name: `Wall ${wallLetter(segmentIndex(w))}` }
+      : w,
+  );
+  const box = bounds(outline);
+  const room = { ...data.room, outline, widthCm: box.w, depthCm: box.h };
+  return syncRoom({ ...data, room, walls: ordered });
 }

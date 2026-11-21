@@ -34,6 +34,12 @@ export const CATEGORY_LABELS: Record<ElementCategory, string> = {
   door: 'Door',
   socket: 'Socket',
   power_socket: 'Power Socket 16A',
+  stool: 'Stool',
+  dishwasher: 'Dishwasher',
+  trash_cabinet: 'Pull-out Trash',
+  hood: 'Range Hood',
+  end_panel: 'End Panel',
+  column: 'Column / pipe box',
   partition_joint: 'Partition wall',
 };
 
@@ -97,6 +103,12 @@ const SPECS: Record<ElementCategory, Spec> = {
   // Wall sockets: y is the plate's bottom edge; the default centre height is 110 cm.
   socket: { width: 8, height: 8, depth: 0, y: 106, toeKick: 0 },
   power_socket: { width: 9, height: 9, depth: 0, y: 105.5, toeKick: 0 },
+  stool: { width: 40, height: 75, depth: 40, y: 0, toeKick: 0 },
+  dishwasher: { width: 60, height: 87, depth: 60, y: 0, toeKick: 10 },
+  trash_cabinet: { width: 45, height: 87, depth: 60, y: 0, toeKick: 10 },
+  hood: { width: 60, height: 50, depth: 50, y: 155, toeKick: 0 },
+  end_panel: { width: 2, height: 87, depth: 62, y: 0, toeKick: 0 },
+  column: { width: 30, height: 260, depth: 30, y: 0, toeKick: 0 },
   partition_joint: { width: 10, height: 260, depth: 0, y: 0, toeKick: 0 },
 };
 
@@ -181,7 +193,8 @@ export function createRoomWalls(room: Room): WallRun[] {
 
 /** A new island centred in the room. */
 export function createIsland(room: Room, existing: WallRun[]): WallRun {
-  const n = existing.filter((w) => w.kind === 'island').length;
+  // Count islands, not their sides (review finding R22).
+  const n = existing.filter((w) => w.kind === 'island' && (!w.face || w.face === 'a')).length;
   const widthCm = Math.min(240, Math.max(60, room.widthCm - 120));
   const depthCm = 90;
   return {

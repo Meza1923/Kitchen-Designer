@@ -1,7 +1,7 @@
 import type { ElementCategory, FridgeType, KitchenItem, WallRun } from '../types';
 import { DEFAULT_BASE_HEIGHT } from './defaults';
 
-export type Layer = 'floor' | 'upper' | 'counter' | 'electrical';
+export type Layer = 'floor' | 'upper' | 'counter' | 'electrical' | 'seat';
 
 export const SNAP_DISTANCE_CM = 3;
 export const GAP_WARNING_CM = 10;
@@ -16,21 +16,40 @@ const FLOOR: ElementCategory[] = [
   'fridge',
   'washing_machine',
   'under_counter_oven',
+  'dishwasher',
+  'trash_cabinet',
+  'end_panel',
   'partition_joint',
 ];
 /**
  * Upper layer: wall cabinets and wall openings. A door is an opening from the floor up, so through
  * the vertical-overlap rule it collides with base units, upper cabinets and windows in front of / above it.
  */
-const UPPER: ElementCategory[] = ['upper_cabinet', 'shelf', 'window', 'door'];
+const UPPER: ElementCategory[] = ['upper_cabinet', 'shelf', 'window', 'door', 'hood', 'column'];
 /** Wall sockets: their own layer, so they never collide with cabinets (a socket behind a base unit is fine). */
 const ELECTRICAL: ElementCategory[] = ['socket', 'power_socket'];
 
 /** Floor items that carry a countertop slab. */
-export const COUNTER_BEARING: ElementCategory[] = ['base_cabinet', 'under_counter_oven', 'corner_blocker', 'filler'];
+export const COUNTER_BEARING: ElementCategory[] = [
+  'base_cabinet',
+  'under_counter_oven',
+  'corner_blocker',
+  'filler',
+  'dishwasher',
+  'trash_cabinet',
+  'end_panel',
+];
 
 export const layerOf = (c: ElementCategory): Layer =>
-  FLOOR.includes(c) ? 'floor' : UPPER.includes(c) ? 'upper' : ELECTRICAL.includes(c) ? 'electrical' : 'counter';
+  c === 'stool'
+    ? 'seat' // chairs at an island (#14): only collide with each other
+    : FLOOR.includes(c)
+      ? 'floor'
+      : UPPER.includes(c)
+        ? 'upper'
+        : ELECTRICAL.includes(c)
+          ? 'electrical'
+          : 'counter';
 
 export const isElectrical = (c: ElementCategory) => ELECTRICAL.includes(c);
 
@@ -54,20 +73,32 @@ function fillerCarriesCounter(wall: WallRun, f: KitchenItem): boolean {
 export const carriesCountertop = (i: KitchenItem) => isCounterBearing(i.category) && !i.noCountertop;
 export const hasCabinetFronts = (c: ElementCategory) => c === 'base_cabinet' || c === 'upper_cabinet';
 export const hasToeKickOption = (c: ElementCategory) =>
-  ['base_cabinet', 'tall_cabinet', 'corner_blocker', 'filler', 'under_counter_oven', 'upper_cabinet'].includes(c);
+  [
+    'base_cabinet',
+    'tall_cabinet',
+    'corner_blocker',
+    'filler',
+    'under_counter_oven',
+    'upper_cabinet',
+    'dishwasher',
+    'trash_cabinet',
+  ].includes(c);
 export const canMoveVertically = (c: ElementCategory) => (layerOf(c) === 'upper' && c !== 'door') || isElectrical(c);
 /** Openings live in the wall itself (no depth into the room); only walls can hold them. */
 export const isOpening = (c: ElementCategory) => c === 'window' || c === 'door';
 /** Items fixed in or on a wall (openings and sockets): walls only, never islands. */
 export const isWallMounted = (c: ElementCategory) => isOpening(c) || isElectrical(c);
 /** Elements that need a wall behind them: wall-mounted items and open wall shelves (never on islands). */
-export const isWallOnly = (c: ElementCategory) => isWallMounted(c) || c === 'shelf';
+export const isWallOnly = (c: ElementCategory) => isWallMounted(c) || c === 'shelf' || c === 'column';
 
 /**
  * Where a partition wall meets its host wall (FEATURES.md #10): a derived, full-height floor item on the host, so
  * cabinets can't stand there and snap / gap / placement treat it like any neighbour. Never selected or listed.
  */
 export const isJoint = (i: KitchenItem) => i.category === 'partition_joint';
+
+/** Building elements that split a run into separate stretches: partition joints and columns standing on the floor. */
+export const isRunDivider = (i: KitchenItem) => isJoint(i) || (i.category === 'column' && i.y < 1 && i.depth > 0);
 
 export const round1 = (v: number) => Math.round(v * 10) / 10;
 export const fmt = (v: number) => (Number.isInteger(round1(v)) ? String(round1(v)) : round1(v).toFixed(1));
@@ -126,7 +157,7 @@ export function canCollide(a: KitchenItem, b: KitchenItem): boolean {
   const la = layerOf(a.category);
   const lb = layerOf(b.category);
   const vertical = overlaps1d(a.y, top(a), b.y, top(b));
-  if (la === lb) return la === 'floor' || la === 'counter' || vertical;
+  if (la === lb) return la === 'floor' || la === 'counter' || la === 'seat' || vertical;
   if ((la === 'floor' && lb === 'upper') || (la === 'upper' && lb === 'floor')) return vertical;
   return false;
 }
@@ -342,7 +373,7 @@ export function computeSocketIssues(wall: WallRun): SocketIssue[] {
     if (wall.items.some((o) => isOpening(o.category) && covers(o))) issues.push({ item: s, reason: 'opening' });
     else if (
       wall.items.some(
-        (o) => (o.category === 'upper_cabinet' || o.category === 'tall_cabinet' || o.category === 'shelf') && covers(o),
+        (o) => ['upper_cabinet', 'tall_cabinet', 'shelf', 'column', 'hood'].includes(o.category) && covers(o),
       )
     ) {
       issues.push({ item: s, reason: 'hidden' });
@@ -377,7 +408,9 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number | null {
   if (layer === 'counter') {
     const occupied = itemsInLayer(wall, 'counter');
     const host = wall.items
-      .filter((i) => carriesCountertop(i) && i.category !== 'corner_blocker' && i.category !== 'filler')
+      .filter(
+        (i) => carriesCountertop(i) && !['corner_blocker', 'filler', 'dishwasher', 'end_panel'].includes(i.category),
+      )
       .sort((a, b) => a.x - b.x)
       .find((b) => !occupied.some((c) => overlaps1d(c.x, right(c), b.x, right(b))));
     if (host) return clampX(wall, item, host.x + (host.width - item.width) / 2);
@@ -395,12 +428,16 @@ export function findFreeX(wall: WallRun, item: KitchenItem): number | null {
     return null;
   }
   const blockers = wall.items.filter((o) => canCollide(o, item)).sort((a, b) => a.x - b.x);
+  // Chairs keep a little room between them, so they end up about 60 cm apart (#14).
+  const room = layer === 'seat' ? 20 : 0;
   let cursor = 0;
   for (const b of blockers) {
-    if (b.x - cursor >= item.width) return cursor;
+    const at = cursor === 0 ? cursor : cursor + room;
+    if (b.x - room - at >= item.width) return at;
     cursor = Math.max(cursor, right(b));
   }
-  return wall.widthCm - cursor >= item.width ? cursor : null;
+  const at = cursor === 0 ? cursor : cursor + room;
+  return wall.widthCm - at >= item.width ? at : null;
 }
 
 /** Start of the widest free stretch on the item's layer (clamped so the item stays on the wall). */
@@ -456,7 +493,7 @@ export interface FridgeDoor {
 }
 
 /** Door layout per fridge type; the elevation and the 3D view both draw from this. */
-export function fridgeDoors(type: FridgeType = 'side_by_side'): FridgeDoor[] {
+export function fridgeDoors(type: FridgeType = 'side_by_side', hinge: 'left' | 'right' = 'left'): FridgeDoor[] {
   const pair = (fy0: number, fy1: number, handle: FridgeDoor['handle']): FridgeDoor[] => [
     { fx0: 0, fx1: 0.5, fy0, fy1, hinge: 'left', handle },
     { fx0: 0.5, fx1: 1, fy0, fy1, hinge: 'right', handle },
@@ -468,8 +505,9 @@ export function fridgeDoors(type: FridgeType = 'side_by_side'): FridgeDoor[] {
       return [...pair(0, 0.4, 'top'), ...pair(0.4, 1, 'bottom')];
     case 'top_bottom':
       return [
-        { fx0: 0, fx1: 1, fy0: 0, fy1: 0.35, hinge: 'left', handle: 'top' },
-        { fx0: 0, fx1: 1, fy0: 0.35, fy1: 1, hinge: 'left', handle: 'bottom' },
+        // Single doors: hinged on the side the user picks (R16).
+        { fx0: 0, fx1: 1, fy0: 0, fy1: 0.35, hinge, handle: 'top' },
+        { fx0: 0, fx1: 1, fy0: 0.35, fy1: 1, hinge, handle: 'bottom' },
       ];
   }
 }

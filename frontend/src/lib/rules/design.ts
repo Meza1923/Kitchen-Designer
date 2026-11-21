@@ -3,15 +3,19 @@
  * Distances are cm; the rule texts give mm.
  */
 import type { KitchenItem, ProjectData, WallRun } from '../../types';
-import { computeCountertops, fmt, isCounterBearing, layerOf } from '../geometry';
+import { computeCountertops, fmt, isCounterBearing, layerOf, round1 } from '../geometry';
 import {
   doorSwingRect,
-  islandRect,
+  islandFootprint,
+  islandOf,
+  islandOverhangs,
+  isIslandFront,
   itemPlanRect,
   localRect,
   partitionRects,
   rectIntersection,
   rectsOverlap,
+  runEnds,
   segmentHitsRect,
   wallFrame,
   type Frame,
@@ -43,6 +47,8 @@ import {
 } from './core';
 import { addScribeFiller, insertFiller } from './fixes';
 import { lineInOutline, rectInOutline, roomOutline } from '../outline';
+import { runName, t } from '../i18n';
+import { SIDE_NAMES } from '../island';
 
 const CORNER_FILLER = 5; // R1
 const HINGE_GAP = [5, 10] as const; // R2
@@ -51,6 +57,11 @@ const WINDOW_CASING = 5; // R5
 const COOKTOP_SIDE = [20, 30] as const; // R6
 const SINK_COOKTOP = [40, 60] as const; // R7
 const HOOD_MIN_ELECTRIC = 65; // R8
+const HOOD_MIN_GAS = 75; // R8
+const DW_DOOR = 60; // R3: how far an open dishwasher door reaches
+const DW_SINK_MAX = 150; // R12
+const OVERHANG_MAX = 30; // R13
+const KNEE_MIN = 25; // R13: countertop over the knees of someone sitting
 const SCRIBE = [3, 5] as const; // R14
 const LANDING = 40; // R15
 const TRIANGLE = [120, 270] as const; // R17
@@ -59,7 +70,7 @@ const right = (i: KitchenItem) => i.x + i.width;
 
 /** A fix that puts a filler of `width` against the corner obstacle (wall or perpendicular fronts) at corner `c`. */
 const cornerFiller = (c: Corner, obstacle: number, width: number, serves: KitchenItem) => ({
-  label: `Add ${width} cm filler`,
+  label: t('Add {width} cm filler', { width }),
   apply: (data: ProjectData) =>
     c.end === 'start'
       ? insertFiller(data, c.run.id, c.pos + obstacle, width, 'end', serves)
@@ -103,7 +114,16 @@ const R1: Rule = {
               'R1',
               'error',
               'CORNER PULL-OUT',
-              `${at(c.run, i)} opens into the corner ${fmt(Math.max(0, clearance))} cm from ${itemName(other)} on ${c.neighbour.name}: add a filler of at least ${CORNER_FILLER} cm so the handles clear.`,
+              t(
+                '{item} opens into the corner {clearance} cm from {name} on {neighbour}: add a filler of at least {CORNER_FILLER} cm so the handles clear.',
+                {
+                  item: at(c.run, i),
+                  clearance: fmt(Math.max(0, clearance)),
+                  name: itemName(other),
+                  neighbour: runName(c.neighbour.name),
+                  CORNER_FILLER,
+                },
+              ),
               {
                 items: [ref(c.run, i), ref(c.neighbour, other)],
                 fix: cornerFiller(c, depth, CORNER_FILLER, i),
@@ -131,7 +151,18 @@ const R2: Rule = {
               'R2',
               severity,
               'HINGE AT WALL',
-              `${at(c.run, i)} is hinged ${fmt(Math.max(0, gap))} cm from the ${obstacle ? 'units' : 'wall'} on ${c.neighbour.name}: leave ${HINGE_GAP[0]}–${HINGE_GAP[1]} cm so the door opens past 90°.`,
+              t(
+                obstacle
+                  ? '{item} is hinged {gap} cm from the units on {neighbour}: leave {HINGE_GAP}–{HINGE_GAP2} cm so the door opens past 90°.'
+                  : '{item} is hinged {gap} cm from the wall on {neighbour}: leave {HINGE_GAP}–{HINGE_GAP2} cm so the door opens past 90°.',
+                {
+                  item: at(c.run, i),
+                  gap: fmt(Math.max(0, gap)),
+                  neighbour: runName(c.neighbour.name),
+                  HINGE_GAP: HINGE_GAP[0],
+                  HINGE_GAP2: HINGE_GAP[1],
+                },
+              ),
               {
                 items: [ref(c.run, i)],
                 fix: cornerFiller(c, obstacle, HINGE_GAP[1], i),
@@ -195,7 +226,12 @@ const R4: Rule = {
               'R4',
               'error',
               'FRONTS COLLIDE',
-              `Open fronts of ${at(p.run, p.item)} and ${at(q.run, q.item)} collide: they need ${fmt(reach)} cm, the aisle is ${fmt(gap)} cm.`,
+              t('Open fronts of {item} and {item2} collide: they need {reach} cm, the aisle is {gap} cm.', {
+                item: at(p.run, p.item),
+                item2: at(q.run, q.item),
+                reach: fmt(reach),
+                gap: fmt(gap),
+              }),
               {
                 items: [ref(p.run, p.item), ref(q.run, q.item)],
                 planArea: area,
@@ -213,7 +249,12 @@ const R4: Rule = {
           'R4',
           'warning',
           'NARROW AISLE',
-          `The aisle between ${p.run.name} and ${q.run.name} is ${fmt(gap)} cm; at least ${AISLE_MIN} cm is needed to work and pass.`,
+          t('The aisle between {run} and {run2} is {gap} cm; at least {AISLE_MIN} cm is needed to work and pass.', {
+            run: runName(p.run.name),
+            run2: runName(q.run.name),
+            gap: fmt(gap),
+            AISLE_MIN,
+          }),
           {
             items: [ref(p.run, p.item), ref(q.run, q.item)],
             planArea: area,
@@ -233,18 +274,22 @@ const R5: Rule = {
     // Tall units right next to a window: they cover its casing.
     for (const run of liveRuns(data)) {
       for (const win of ofCategory(run, 'window')) {
-        for (const t of run.items.filter(isTall)) {
-          const gap = edgeGap(t, win);
-          const vertical = t.y < win.y + win.height && win.y < t.y + t.height;
+        for (const tall of run.items.filter(isTall)) {
+          const gap = edgeGap(tall, win);
+          const vertical = tall.y < win.y + win.height && win.y < tall.y + tall.height;
           if (gap >= 0 && gap < WINDOW_CASING && vertical) {
             out.push(
               v(
                 'R5',
                 'error',
                 'BLOCKS WINDOW',
-                `${at(run, t)} stands ${fmt(gap)} cm from the window: it covers the window casing (needs ${WINDOW_CASING} cm).`,
+                t('{item} stands {gap} cm from the window: it covers the window casing (needs {WINDOW_CASING} cm).', {
+                  item: at(run, tall),
+                  gap: fmt(gap),
+                  WINDOW_CASING,
+                }),
                 {
-                  items: [ref(run, t), ref(run, win)],
+                  items: [ref(run, tall), ref(run, win)],
                 },
               ),
             );
@@ -269,7 +314,10 @@ const R5: Rule = {
                 'R5',
                 'error',
                 'DOOR SWEEP',
-                `The open front of ${at(other, i)} swings into the sweep of the room door on ${run.name}.`,
+                t('The open front of {item} swings into the sweep of the room door on {run}.', {
+                  item: at(other, i),
+                  run: runName(run.name),
+                }),
                 {
                   items: [ref(other, i), ref(run, door)],
                   planArea: rectIntersection(swing, sweep),
@@ -292,17 +340,22 @@ const R6: Rule = {
     return liveRuns(data).flatMap((run) =>
       ofCategory(run, 'stove').flatMap((stove) => {
         const sides: { gap: number; what: string; who?: KitchenItem }[] = [];
-        for (const t of run.items.filter(isTall)) sides.push({ gap: edgeGap(stove, t), what: itemName(t), who: t });
+        // Tall units, and columns standing at cooktop height (review finding R16).
+        const beside = (i: KitchenItem) =>
+          isTall(i) || (i.category === 'column' && i.y < stove.y && i.y + i.height > stove.y);
+        for (const tall of run.items.filter(beside))
+          sides.push({ gap: edgeGap(stove, tall), what: itemName(tall), who: tall });
         for (const c of all.filter((k) => k.run.id === run.id)) {
           const units = cornerUnits(c);
           const d = cornerDist(c, stove);
           if (!Number.isFinite(d)) continue;
           // A bare wall, or tall units standing in the corner; base units there leave the space above free.
-          if (!units.length) sides.push({ gap: d, what: `the wall (${c.neighbour.name})` });
+          if (!units.length)
+            sides.push({ gap: d, what: t('the wall ({neighbour})', { neighbour: runName(c.neighbour.name) }) });
           else if (units.some(isTall))
             sides.push({
               gap: d - cornerDepth(c),
-              what: `the tall units on ${c.neighbour.name}`,
+              what: t('the tall units on {neighbour}', { neighbour: runName(c.neighbour.name) }),
             });
         }
         return sides.flatMap(({ gap, what, who }) => {
@@ -313,7 +366,13 @@ const R6: Rule = {
               'R6',
               severity,
               'COOKTOP CLEARANCE',
-              `${at(run, stove)} is ${fmt(Math.max(0, gap))} cm from ${what}; keep ${COOKTOP_SIDE[0]}–${COOKTOP_SIDE[1]} cm beside a cooktop.`,
+              t('{item} is {gap} cm from {what}; keep {COOKTOP_SIDE}–{COOKTOP_SIDE2} cm beside a cooktop.', {
+                item: at(run, stove),
+                gap: fmt(Math.max(0, gap)),
+                what,
+                COOKTOP_SIDE: COOKTOP_SIDE[0],
+                COOKTOP_SIDE2: COOKTOP_SIDE[1],
+              }),
               {
                 items: [ref(run, stove), ...(who ? [ref(run, who)] : [])],
               },
@@ -342,7 +401,10 @@ const R7: Rule = {
             'R7',
             severity,
             'SINK ↔ COOKTOP',
-            `Only ${fmt(gap)} cm of countertop between the sink and the cooktop on ${run.name}; aim for ${SINK_COOKTOP[0]}–${SINK_COOKTOP[1]} cm.`,
+            t(
+              'Only {gap} cm of countertop between the sink and the cooktop on {run}; aim for {SINK_COOKTOP}–{SINK_COOKTOP2} cm.',
+              { gap: fmt(gap), run: runName(run.name), SINK_COOKTOP: SINK_COOKTOP[0], SINK_COOKTOP2: SINK_COOKTOP[1] },
+            ),
             {
               items: [ref(run, sink), ref(run, stove)],
               wallArea: {
@@ -366,17 +428,24 @@ const R8: Rule = {
   check: perRun((run) =>
     ofCategory(run, 'stove').flatMap((stove) => {
       const surface = stove.y + run.countertopThicknessCm;
-      return ofCategory(run, 'upper_cabinet', 'shelf')
+      const gas = stove.cooktopType === 'gas';
+      const min = gas ? HOOD_MIN_GAS : HOOD_MIN_ELECTRIC;
+      return ofCategory(run, 'upper_cabinet', 'shelf', 'hood')
         .filter((u) => edgeGap(u, stove) < -1)
         .flatMap((u) => {
           const clearance = u.y - surface;
-          if (clearance >= HOOD_MIN_ELECTRIC || clearance < 0) return [];
+          if (clearance >= min || clearance < 0) return [];
           return [
             v(
               'R8',
               'error',
               'TOO LOW ABOVE COOKTOP',
-              `${at(run, u)} is ${fmt(clearance)} cm above the cooktop; at least ${HOOD_MIN_ELECTRIC} cm is needed (75 cm for gas).`,
+              t(
+                gas
+                  ? '{item} is {clearance} cm above the gas cooktop; at least {min} cm is needed.'
+                  : '{item} is {clearance} cm above the cooktop; at least {min} cm is needed ({gasMin} cm for gas).',
+                { item: at(run, u), clearance: fmt(clearance), min, gasMin: HOOD_MIN_GAS },
+              ),
               {
                 items: [ref(run, u), ref(run, stove)],
                 wallArea: {
@@ -394,6 +463,211 @@ const R8: Rule = {
   ),
 };
 
+/** R3: an open dishwasher door right by an inside corner blocks the fronts of the run around the corner. */
+const R3: Rule = {
+  id: 'R3',
+  title: 'Dishwasher corner trap',
+  check: ({ data }) =>
+    corners(data).flatMap((c) =>
+      ofCategory(c.run, 'dishwasher').flatMap((dw) => {
+        const clearance = cornerDist(c, dw) - cornerDepth(c);
+        if (!Number.isFinite(clearance) || clearance < -0.5 || clearance >= DW_DOOR) return [];
+        // Units around the corner whose fronts face into the space the open door takes (depth d … d + door).
+        const blocked = floorUnits(c.neighbour).filter((y) => {
+          const d = neighbourDist(c, y);
+          return d < dw.depth + DW_DOOR && d + y.width > dw.depth && openReach(y) > clearance;
+        });
+        if (!blocked.length) return [];
+        return [
+          v(
+            'R3',
+            'error',
+            'DISHWASHER CORNER',
+            t(
+              'The open door of {item} (about {DW_DOOR} cm) blocks {name} on {neighbour}: move the dishwasher at least {DW_DOOR} cm from the corner.',
+              { item: at(c.run, dw), DW_DOOR, name: itemName(blocked[0]), neighbour: runName(c.neighbour.name) },
+            ),
+            { items: [ref(c.run, dw), ...blocked.map((y) => ref(c.neighbour, y))] },
+          ),
+        ];
+      }),
+    ),
+};
+
+/** R10: a dishwasher or washer at an open end of a run needs an end panel to close it. */
+const R10: Rule = {
+  id: 'R10',
+  title: 'Unsupported appliance end-run',
+  check: ({ data }) =>
+    liveRuns(data).flatMap((run) => {
+      const ends = runEnds(data, run);
+      const units = floorUnits(run);
+      return ofCategory(run, 'dishwasher', 'washing_machine').flatMap((a) => {
+        // Open ends with nothing between the appliance and them.
+        const open = (['start', 'end'] as End[]).filter(
+          (end) =>
+            ends[end].kind === 'open' &&
+            !units.some((u) => u.id !== a.id && (end === 'start' ? right(u) <= a.x + 0.5 : u.x >= right(a) - 0.5)),
+        );
+        if (!open.length) return [];
+        const sides = open.map((e) => t(e === 'start' ? 'left' : 'right')).join(t(' and '));
+        return [
+          v(
+            'R10',
+            'error',
+            'NO END PANEL',
+            t(
+              '{item} stands at the open {sides} end of {run}: add an end panel to close the run and carry the countertop.',
+              { item: at(run, a), sides, run: runName(run.name) },
+            ),
+            { items: [ref(run, a)] },
+          ),
+        ];
+      });
+    }),
+};
+
+/** R12: the dishwasher drains into the sink, so it belongs next to it. */
+const R12: Rule = {
+  id: 'R12',
+  title: 'Dishwasher plumbing distance',
+  check: ({ data }) => {
+    const sinks = liveRuns(data).flatMap((run) => ofCategory(run, 'sink').map((s) => ({ run, s })));
+    if (!sinks.length) return [];
+    return liveRuns(data).flatMap((run) =>
+      ofCategory(run, 'dishwasher').flatMap((dw) => {
+        const same = sinks.filter((k) => k.run.id === run.id);
+        if (!same.length)
+          return [
+            v(
+              'R12',
+              'warning',
+              'DW FAR FROM SINK',
+              t(
+                '{item} is on a different run from the sink (across a corner): keep it within {DW_SINK_MAX} cm of the sink, on the same run.',
+                { item: at(run, dw), DW_SINK_MAX },
+              ),
+              { items: [ref(run, dw), ref(sinks[0].run, sinks[0].s)] },
+            ),
+          ];
+        const near = same.map((k) => ({ ...k, gap: Math.max(0, edgeGap(dw, k.s)) })).sort((p, q) => p.gap - q.gap)[0];
+        if (near.gap <= DW_SINK_MAX) return [];
+        return [
+          v(
+            'R12',
+            'warning',
+            'DW FAR FROM SINK',
+            t('{item} is {gap} cm from the sink; keep it within {DW_SINK_MAX} cm for the drain.', {
+              item: at(run, dw),
+              gap: fmt(near.gap),
+              DW_SINK_MAX,
+            }),
+            { items: [ref(run, dw), ref(run, near.s)] },
+          ),
+        ];
+      }),
+    );
+  },
+};
+
+/** R16: a single-door fridge should open towards the counter where the food goes. */
+const R16: Rule = {
+  id: 'R16',
+  title: 'Reverse refrigerator swing',
+  check: perRun((run) =>
+    ofCategory(run, 'fridge')
+      .filter((f) => f.fridgeType === 'top_bottom')
+      .flatMap((f) => {
+        const slabs = computeCountertops(run);
+        const gapLeft = Math.min(
+          Infinity,
+          ...slabs.filter((c) => c.x + c.width <= f.x + 0.5).map((c) => f.x - (c.x + c.width)),
+        );
+        const gapRight = Math.min(Infinity, ...slabs.filter((c) => c.x >= right(f) - 0.5).map((c) => c.x - right(f)));
+        const hinge = f.doorHinge ?? 'left';
+        // The door opens on the side away from the hinge; the nearest countertop should be on that side.
+        const [hingeGap, openGap] = hinge === 'left' ? [gapLeft, gapRight] : [gapRight, gapLeft];
+        if (!Number.isFinite(hingeGap) || hingeGap >= openGap) return [];
+        return [
+          v(
+            'R16',
+            'warning',
+            'FRIDGE OPENS AWAY',
+            t(
+              '{item} opens away from the nearest countertop (on its {hinge} side): hinge it on the {left} so you can put things down while the door is open.',
+              { item: at(run, f), hinge: t(hinge), left: t(hinge === 'left' ? 'right' : 'left') },
+            ),
+            {
+              items: [ref(run, f)],
+              fix: {
+                label: t('Hinge it on the {left}', { left: t(hinge === 'left' ? 'right' : 'left') }),
+                apply: (d: ProjectData) => ({
+                  ...d,
+                  walls: d.walls.map((w) =>
+                    w.id === run.id
+                      ? {
+                          ...w,
+                          items: w.items.map((i) =>
+                            i.id === f.id ? { ...i, doorHinge: hinge === 'left' ? 'right' : 'left' } : i,
+                          ),
+                        }
+                      : w,
+                  ),
+                }),
+              },
+            },
+          ),
+        ];
+      }),
+  ),
+};
+
+/** R19: trash next to the sink, and dishwasher and trash on opposite sides of it. */
+const R19: Rule = {
+  id: 'R19',
+  title: 'Sink-dishwasher-trash conflict',
+  check: perRun((run) =>
+    ofCategory(run, 'sink').flatMap((sink) => {
+      const trash = ofCategory(run, 'trash_cabinet');
+      if (!trash.length) return [];
+      const centre = sink.x + sink.width / 2;
+      const side = (i: KitchenItem) => (i.x + i.width / 2 < centre ? 'left' : 'right');
+      // The unit under the sink: trash should touch it (or stand under the sink itself).
+      const under = floorUnits(run).find((u) => u.x <= centre && right(u) >= centre && u.category !== 'trash_cabinet');
+      const nextTo = (bin: KitchenItem) =>
+        edgeGap(bin, sink) <= 0.5 || (under !== undefined && Math.abs(edgeGap(bin, under)) <= 0.5);
+      const out: Violation[] = [];
+      const bin = trash.slice().sort((a, b) => Math.abs(a.x - sink.x) - Math.abs(b.x - sink.x))[0];
+      if (!nextTo(bin))
+        out.push(
+          v(
+            'R19',
+            'warning',
+            'TRASH NOT AT SINK',
+            t("{item} isn't next to the sink: put the trash pull-out right beside it.", { item: at(run, bin) }),
+            {
+              items: [ref(run, bin), ref(run, sink)],
+            },
+          ),
+        );
+      for (const dw of ofCategory(run, 'dishwasher').filter((d) => side(d) === side(bin)))
+        out.push(
+          v(
+            'R19',
+            'warning',
+            'DW AND TRASH SAME SIDE',
+            t(
+              '{item} and {name} are on the same side of the sink: put them on opposite sides so both can be used while rinsing.',
+              { item: at(run, dw), name: itemName(bin) },
+            ),
+            { items: [ref(run, dw), ref(run, bin), ref(run, sink)] },
+          ),
+        );
+      return out;
+    }),
+  ),
+};
+
 const R9: Rule = {
   id: 'R9',
   title: 'Thermal adjacency conflict',
@@ -406,7 +680,10 @@ const R9: Rule = {
             'R9',
             'warning',
             'OVEN NEXT TO FRIDGE',
-            `The oven tower ${at(run, oven)} stands directly against ${itemName(fr)}: put an insulating panel or a narrow cabinet between them.`,
+            t(
+              'The oven tower {item} stands directly against {name}: put an insulating panel or a narrow cabinet between them.',
+              { item: at(run, oven), name: itemName(fr) },
+            ),
             {
               items: [ref(run, oven), ref(run, fr)],
             },
@@ -431,7 +708,10 @@ const R11: Rule = {
           'R11',
           'error',
           'CUTOUT OVER JOINT',
-          `The cutout for ${at(run, cut)} sits over the side panels between two base units (joint at X ${inside.map(fmt).join(', ')}): centre it on one unit.`,
+          t(
+            'The cutout for {item} sits over the side panels between two base units (joint at X {join}): centre it on one unit.',
+            { item: at(run, cut), join: inside.map(fmt).join(', ') },
+          ),
           {
             items: [ref(run, cut)],
           },
@@ -439,6 +719,67 @@ const R11: Rule = {
       ];
     });
   }),
+};
+
+const R13: Rule = {
+  id: 'R13',
+  title: 'Unsupported countertop span',
+  check: ({ data }) =>
+    data.walls.filter(isIslandFront).flatMap((isl) => {
+      const overhangs = islandOverhangs(data, isl);
+      const out: Violation[] = [];
+      for (const o of overhangs) {
+        if (o.cantilever <= OVERHANG_MAX + 0.05 || o.supported) continue;
+        const long = o.face === 'a' || o.face === 'b';
+        const fitted = round1((isl.depthCm ?? 90) - (o.cantilever - OVERHANG_MAX));
+        out.push(
+          v(
+            'R13',
+            'error',
+            'OVERHANG',
+            t(
+              long
+                ? 'The countertop of {isl} sticks out {o} cm past the cabinets: over {OVERHANG_MAX} cm it needs support. Give both ends a waterfall, or make the island less deep.'
+                : 'The countertop at the end of {isl} sticks out {o} cm past the cabinets: over {OVERHANG_MAX} cm it needs support. Add a waterfall at that end, or a cabinet.',
+              { isl: runName(isl.name), o: fmt(o.cantilever), OVERHANG_MAX },
+            ),
+            {
+              planArea: o.rect,
+              ...(long && {
+                fix: {
+                  label: t('Make the island {cm} cm deep', { cm: fmt(fitted) }),
+                  apply: (d: ProjectData) => ({
+                    ...d,
+                    walls: d.walls.map((w) => (w.id === isl.id ? { ...w, depthCm: fitted } : w)),
+                  }),
+                },
+              }),
+            },
+          ),
+        );
+      }
+      // Chairs need room for knees under the countertop.
+      for (const run of [isl, ...data.walls.filter((w) => w.hostId === isl.id && w.kind === 'island')]) {
+        const chairs = run.items.filter((i) => i.category === 'stool');
+        if (!chairs.length) continue;
+        const face = run.face && run.face !== 'a' ? run.face : 'a';
+        const knees = overhangs.find((o) => o.face === face)?.cantilever ?? 0;
+        if (knees >= KNEE_MIN) continue;
+        out.push(
+          v(
+            'R13',
+            'warning',
+            'NO KNEE ROOM',
+            t(
+              'The chairs at the {side} of {isl} have {cm} cm of countertop over their knees: leave at least {min} cm (make the island deeper, or move the cabinets on that side).',
+              { side: t(SIDE_NAMES[face]).toLowerCase(), isl: runName(isl.name), cm: fmt(knees), min: KNEE_MIN },
+            ),
+            { items: chairs.map((c) => ref(run, c)) },
+          ),
+        );
+      }
+      return out;
+    }),
 };
 
 const R14: Rule = {
@@ -450,16 +791,16 @@ const R14: Rule = {
     return liveRuns(data)
       .flatMap((run) => {
         const mine = all.filter((c) => c.run.id === run.id);
-        const ends = mine.filter((c) => c.end === 'end').map((c) => c.pos);
-        return mine
-          .filter((c) => c.end === 'start')
-          .flatMap((c) => {
-            const p0 = c.pos;
-            const p1 = Math.min(...ends.filter((e) => e > p0 + 0.5));
-            if (!Number.isFinite(p1)) return [];
-            const whole = p0 < 0.5 && p1 > run.widthCm - 0.5;
-            return [{ run, p0, p1, whole }];
-          });
+        // A floor-standing column bounds a stretch too, like a wall (review finding R16).
+        const columns = run.items.filter((i) => i.category === 'column' && i.y < 1 && i.depth > 0);
+        const ends = [...mine.filter((c) => c.end === 'end').map((c) => c.pos), ...columns.map((col) => col.x)];
+        const starts = [...mine.filter((c) => c.end === 'start').map((c) => c.pos), ...columns.map(right)];
+        return starts.flatMap((p0) => {
+          const p1 = Math.min(...ends.filter((e) => e > p0 + 0.5));
+          if (!Number.isFinite(p1)) return [];
+          const whole = p0 < 0.5 && p1 > run.widthCm - 0.5;
+          return [{ run, p0, p1, whole }];
+        });
       })
       .flatMap(({ run, p0, p1, whole }) => {
         const units = floorUnits(run)
@@ -483,11 +824,20 @@ const R14: Rule = {
             'R14',
             severity,
             'NO SCRIBE ALLOWANCE',
-            `The units on ${run.name}${whole ? '' : ` (${fmt(p0)}–${fmt(p1)} cm)`} run wall to wall with ${fmt(fillers)} cm of filler; leave ${SCRIBE[0]}–${SCRIBE[1]} cm in total to fit against crooked walls.`,
+            t(
+              'The units on {run}{cm} run wall to wall with {fillers} cm of filler; leave {SCRIBE}–{SCRIBE2} cm in total to fit against crooked walls.',
+              {
+                run: runName(run.name),
+                cm: whole ? '' : ` (${fmt(p0)}–${fmt(p1)} cm)`,
+                fillers: fmt(fillers),
+                SCRIBE: SCRIBE[0],
+                SCRIBE2: SCRIBE[1],
+              },
+            ),
             {
               items: units.map((u) => ref(run, u)),
               fix: {
-                label: `Add ${fmt(SCRIBE[1] - fillers)} cm scribe filler`,
+                label: t('Add {fillers} cm scribe filler', { fillers: fmt(SCRIBE[1] - fillers) }),
                 apply: (data) => addScribeFiller(data, run.id, SCRIBE[1] - fillers, [p0, p1]),
               },
             },
@@ -530,7 +880,15 @@ const R15: Rule = {
             'R15',
             'warning',
             'NO LANDING ZONE',
-            `${at(run, i)} has ${fmt(Math.max(0, best))} cm of clear countertop beside it${i.category === 'fridge' && sides.length === 1 ? ' on its handle side' : ''}; leave at least ${LANDING} cm to put things down.`,
+            t(
+              '{item} has {best} cm of clear countertop beside it{side}; leave at least {LANDING} cm to put things down.',
+              {
+                item: at(run, i),
+                best: fmt(Math.max(0, best)),
+                side: i.category === 'fridge' && sides.length === 1 ? t(' on its handle side') : '',
+                LANDING,
+              },
+            ),
             {
               items: [ref(run, i)],
             },
@@ -578,13 +936,15 @@ const R17: Rule = {
       // A partition wall across the leg counts too (review finding R13).
       const part = partitions.find(({ rect }) => segmentHitsRect(a.p, b.p, rect));
       if (lineInOutline(outline, a.p, b.p) && !part) continue;
-      const wall = part ? (part.run.name.match(/^Partition \d+/)?.[0] ?? part.run.name) : 'A wall of the room';
+      const wall = part
+        ? runName(part.run.name.match(/^Partition \d+/)?.[0] ?? part.run.name)
+        : t('A wall of the room');
       out.push(
         v(
           'R17',
           'warning',
           'WALL IN THE WAY',
-          `${wall} stands between ${what}: the work triangle has to go around it.`,
+          t('{wall} stands between {what}: the work triangle has to go around it.', { wall, what: t(what) }),
           {
             items: [ref(a.run, a.item), ref(b.run, b.item)],
             ...(part && { planArea: part.rect }),
@@ -600,25 +960,29 @@ const R17: Rule = {
           'R17',
           'warning',
           'WORK TRIANGLE',
-          `Work triangle legs outside ${TRIANGLE[0]}–${TRIANGLE[1]} cm: ${bad.map(({ d, k }) => `${names[k]} ${fmt(d)} cm`).join(', ')}.`,
+          t('Work triangle legs outside {TRIANGLE}–{TRIANGLE2} cm: {join}.', {
+            TRIANGLE: TRIANGLE[0],
+            TRIANGLE2: TRIANGLE[1],
+            join: bad.map(({ d, k }) => `${t(names[k])} ${fmt(d)} ${t('cm')}`).join(', '),
+          }),
           { items },
         ),
       );
     }
     // Islands standing in the way (other than one holding an endpoint).
-    const hosts = new Set(best.pts.map((x) => x.run.id));
+    const hosts = new Set(best.pts.map((x) => islandOf(data, x.run)?.id ?? x.run.id));
     const blocked = data.walls
-      .filter((w) => w.kind === 'island' && !hosts.has(w.id))
+      .filter((w) => isIslandFront(w) && !hosts.has(w.id))
       .filter((isl) => {
-        const r = islandRect(isl);
+        const r = islandFootprint(data, isl);
         return [
           [s.p, c.p],
           [c.p, f.p],
           [f.p, s.p],
         ].some(([a, b]) =>
-          Array.from({ length: 41 }, (_, t) => ({
-            x: a.x + ((b.x - a.x) * t) / 40,
-            y: a.y + ((b.y - a.y) * t) / 40,
+          Array.from({ length: 41 }, (_, step) => ({
+            x: a.x + ((b.x - a.x) * step) / 40,
+            y: a.y + ((b.y - a.y) * step) / 40,
           })).some((q) => q.x > r.x + 1 && q.x < r.x + r.w - 1 && q.y > r.y + 1 && q.y < r.y + r.h - 1),
         );
       });
@@ -628,8 +992,8 @@ const R17: Rule = {
           'R17',
           'warning',
           'ISLAND IN THE WAY',
-          `${isl.name} blocks the direct path between the sink, cooktop and fridge.`,
-          { items, planArea: islandRect(isl) },
+          t('{isl} blocks the direct path between the sink, cooktop and fridge.', { isl: runName(isl.name) }),
+          { items, planArea: islandFootprint(data, isl) },
         ),
       );
     }
@@ -656,7 +1020,10 @@ const R18: Rule = {
               'R18',
               'warning',
               'DEAD CORNER',
-              `The front of ${at(c.run, x)} is blocked by ${itemName(blocker)} on ${c.neighbour.name}: use a corner blocker (blind corner) or a corner unit to reach the space.`,
+              t(
+                'The front of {item} is blocked by {name} on {neighbour}: use a corner blocker (blind corner) or a corner unit to reach the space.',
+                { item: at(c.run, x), name: itemName(blocker), neighbour: runName(c.neighbour.name) },
+              ),
               {
                 items: [ref(c.run, x), ref(c.neighbour, blocker)],
               },
@@ -666,4 +1033,24 @@ const R18: Rule = {
     ),
 };
 
-export const DESIGN_RULES: Rule[] = [R1, R2, R4, R5, R6, R7, R8, R9, R11, R14, R15, R17, R18];
+export const DESIGN_RULES: Rule[] = [
+  R1,
+  R2,
+  R3,
+  R4,
+  R5,
+  R6,
+  R7,
+  R8,
+  R9,
+  R10,
+  R11,
+  R12,
+  R13,
+  R14,
+  R15,
+  R16,
+  R17,
+  R18,
+  R19,
+];

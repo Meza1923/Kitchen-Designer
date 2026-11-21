@@ -7,6 +7,7 @@ import type { ProjectData, WallRun } from '../types';
 import { uid } from './defaults';
 import { isJoint } from './geometry';
 import { MIN_PARTITION_CM, syncRoom, WALL_THICKNESS_CM } from './plan';
+import { runName, t } from './i18n';
 
 export const DEFAULT_PARTITION_CM = 120;
 
@@ -34,7 +35,7 @@ export function addPartition(data: ProjectData, hostId: string): ProjectData | s
   const host = data.walls.find((w) => w.id === hostId);
   if (!host || host.kind !== 'wall' || host.removed) return 'Select a wall tab first: partitions stand on a room wall.';
   const T = WALL_THICKNESS_CM;
-  if (host.widthCm < T) return `${host.name} is too short for a partition.`;
+  if (host.widthCm < T) return t('{host} is too short for a partition.', { host: runName(host.name) });
   const hostX = Math.round(freeCentre(host) - T / 2);
   const partitionId = uid();
   const n = nextNumber(data);

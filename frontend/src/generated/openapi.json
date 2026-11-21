@@ -50,10 +50,32 @@
               "door",
               "socket",
               "power_socket",
+              "dishwasher",
+              "trash_cabinet",
+              "hood",
+              "end_panel",
+              "stool",
+              "column",
               "partition_joint"
             ],
             "title": "Category",
             "type": "string"
+          },
+          "cooktopType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "electric",
+                  "induction",
+                  "gas"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cooktoptype"
           },
           "depth": {
             "anyOf": [
@@ -65,6 +87,21 @@
               }
             ],
             "title": "Depth"
+          },
+          "dishwasherFront": {
+            "anyOf": [
+              {
+                "enum": [
+                  "integrated",
+                  "visible"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dishwasherfront"
           },
           "doorCount": {
             "default": 1,
@@ -235,6 +272,21 @@
               }
             ],
             "title": "Socketcount"
+          },
+          "stoolType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bar",
+                  "counter"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stooltype"
           },
           "tallZones": {
             "anyOf": [
@@ -605,7 +657,9 @@
               {
                 "enum": [
                   "a",
-                  "b"
+                  "b",
+                  "left",
+                  "right"
                 ],
                 "type": "string"
               },
@@ -663,6 +717,22 @@
             "title": "Kind",
             "type": "string"
           },
+          "leftProfile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "panel",
+                  "waterfall"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftprofile"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -710,6 +780,22 @@
               }
             ],
             "title": "Removed"
+          },
+          "rightProfile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "panel",
+                  "waterfall"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rightprofile"
           },
           "rotationDeg": {
             "anyOf": [
@@ -793,7 +879,9 @@
               {
                 "enum": [
                   "a",
-                  "b"
+                  "b",
+                  "left",
+                  "right"
                 ],
                 "type": "string"
               },
@@ -851,6 +939,22 @@
             "title": "Kind",
             "type": "string"
           },
+          "leftProfile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "panel",
+                  "waterfall"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leftprofile"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -898,6 +1002,22 @@
               }
             ],
             "title": "Removed"
+          },
+          "rightProfile": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "panel",
+                  "waterfall"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rightprofile"
           },
           "rotationDeg": {
             "anyOf": [

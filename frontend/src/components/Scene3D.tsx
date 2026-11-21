@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { Maximize } from 'lucide-react';
 import type { ProjectData } from '../types';
 import { buildKitchen, disposeTree, type WallMeta } from '../lib/scene3d';
+import { t } from '../lib/i18n';
 
 interface Props {
   data: ProjectData;
@@ -159,14 +160,14 @@ export default function Scene3D({ data, selectedId, onPick }: Props) {
       <div ref={wrapRef} className="h-full w-full" data-testid="scene3d" />
       <button
         className="btn absolute bottom-3 right-3 bg-white/95 shadow-sm"
-        title="Reset view"
+        title={t('Reset view')}
         onClick={() => ctx.current?.resetView()}
       >
-        <Maximize size={14} /> Reset view
+        <Maximize size={14} /> {t('Reset view')}
       </button>
       <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-white/90 px-2 py-1 font-mono text-[11px] text-slate-500 shadow-sm">
-        <span className="font-semibold text-slate-700">3D</span> · drag to orbit · right-drag to pan · scroll to zoom ·
-        click a cabinet to change its fronts
+        <span className="font-semibold text-slate-700">{t('3D')}</span> ·{' '}
+        {t('drag to orbit · right-drag to pan · scroll to zoom · click a cabinet to change its fronts')}
       </div>
     </div>
   );

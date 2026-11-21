@@ -31,6 +31,8 @@ import {
   layerOf,
   round1,
 } from '../lib/geometry';
+import { directionName, runName, t, t as tr } from '../lib/i18n';
+import { STOOL_SEAT_CM } from '../lib/plan';
 
 export function NumField({
   value,
@@ -70,7 +72,7 @@ export function NumField({
   };
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative ${className}`} dir="ltr">
       <input
         type="number"
         className="field pr-8 font-mono disabled:bg-slate-100 disabled:text-slate-400"
@@ -92,7 +94,7 @@ export function NumField({
       />
       {suffix && (
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-          {suffix}
+          {t(suffix)}
         </span>
       )}
     </div>
@@ -101,14 +103,14 @@ export function NumField({
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <section className="border-b border-slate-200 px-4 py-3">
-    <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-700">{title}</h3>
+    <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-700">{t(title)}</h3>
     <div className="space-y-2.5">{children}</div>
   </section>
 );
 
 const Field = ({ label, children }: { label: string; children: ReactNode }) => (
   <div>
-    <span className="label">{label}</span>
+    <span className="label">{t(label)}</span>
     {children}
   </div>
 );
@@ -128,7 +130,10 @@ export function Chips<T extends string | number>({
     <div className="flex flex-wrap gap-1">
       {options.map((o) => (
         <button key={String(o)} className={`chip ${o === value ? 'chip-active' : ''}`} onClick={() => onChange(o)}>
-          {render ? render(o) : o}
+          {(() => {
+            const shown = render ? render(o) : o;
+            return typeof shown === 'string' ? t(shown) : shown;
+          })()}
         </button>
       ))}
     </div>
@@ -162,7 +167,7 @@ function SumBadge({ total, onNormalize }: { total: number; onNormalize: () => vo
       </span>
       {!ok && (
         <button className="font-semibold underline" onClick={onNormalize}>
-          Normalize
+          {t('Normalize')}
         </button>
       )}
     </div>
@@ -193,12 +198,12 @@ function DrawerConfig({ item, onChange }: { item: KitchenItem; onChange: (p: Par
                 onChange({ drawerCount: n, drawerSplitPcts: p.pcts(n) });
               }}
             >
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
       </Field>
-      <Field label={`Drawer faces, top → bottom (box ${fmt(usable)} cm)`}>
+      <Field label={t('Drawer faces, top → bottom (box {cm} cm)', { cm: fmt(usable) })}>
         <div className="space-y-1">
           {pcts.map((p, i) => (
             <div key={i} className="flex items-center gap-1.5">
@@ -242,7 +247,13 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
     set(next);
   };
   const zoneName = (idx: number) =>
-    idx === 0 ? 'Bottom' : idx === zones.length - 1 ? 'Top' : zones.length === 3 ? 'Middle' : `Zone ${idx + 1}`;
+    idx === 0
+      ? t('Bottom')
+      : idx === zones.length - 1
+        ? t('Top')
+        : zones.length === 3
+          ? t('Middle')
+          : t('Zone {n}', { n: idx + 1 });
 
   // Listed top to bottom to match the drawing; the array is stored bottom to top.
   const ordered = zones.map((z, idx) => ({ z, idx })).reverse();
@@ -253,14 +264,14 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600">{zoneName(idx)} zone</span>
             <div className="flex gap-0.5 text-slate-500">
-              <button title="Move up" className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, 1)}>
+              <button title={t('Move up')} className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, 1)}>
                 <ArrowUp size={13} />
               </button>
-              <button title="Move down" className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, -1)}>
+              <button title={t('Move down')} className="rounded p-0.5 hover:bg-slate-200" onClick={() => move(idx, -1)}>
                 <ArrowDown size={13} />
               </button>
               <button
-                title="Remove zone"
+                title={t('Remove zone')}
                 className="rounded p-0.5 hover:bg-red-100 hover:text-red-600 disabled:opacity-30"
                 disabled={zones.length <= 1}
                 onClick={() => set(zones.filter((x) => x.id !== z.id))}
@@ -279,7 +290,7 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
           >
             {(Object.keys(TALL_ZONE_LABELS) as TallZoneType[]).map((t) => (
               <option key={t} value={t}>
-                {TALL_ZONE_LABELS[t]}
+                {tr(TALL_ZONE_LABELS[t])}
               </option>
             ))}
           </select>
@@ -304,7 +315,7 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
           </div>
           {z.type === 'drawers' && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Drawers</span>
+              <span className="text-xs text-slate-500">{t('Drawers')}</span>
               <Chips
                 options={[1, 2, 3, 4, 5]}
                 value={z.drawerCount ?? 3}
@@ -315,7 +326,7 @@ function TallZones({ item, onChange }: { item: KitchenItem; onChange: (p: Partia
         </div>
       ))}
       <button className="btn w-full justify-center" onClick={() => set([...zones, makeZone('door', 20)])}>
-        <Plus size={14} /> Add zone on top
+        <Plus size={14} /> {t('Add zone on top')}
       </button>
       <SumBadge
         total={sum(zones.map((z) => z.heightPct))}
@@ -365,11 +376,11 @@ export function Inspector({
     <div>
       <div className="border-b border-slate-200 px-4 py-3">
         <div className="text-[11px] font-bold uppercase tracking-wider text-blue-600">
-          {CATEGORY_LABELS[item.category]}
+          {t(CATEGORY_LABELS[item.category])}
         </div>
         <input
           className="field mt-1.5"
-          placeholder="Label (optional, e.g. B1)"
+          placeholder={t('Label (optional, e.g. B1)')}
           value={item.label ?? ''}
           onChange={(e) => onChange({ label: e.target.value || undefined })}
         />
@@ -384,11 +395,21 @@ export function Inspector({
         <Field label="Wall / run">
           <select className="field" value={wall.id} onChange={(e) => onMoveToWall(e.target.value)}>
             {walls
-              .filter((w) => !w.removed && (!isWallOnly(item.category) || w.kind !== 'island'))
+              .filter(
+                (w) =>
+                  !w.removed &&
+                  (!isWallOnly(item.category) || w.kind !== 'island') &&
+                  // Chairs belong at an island (review finding R19).
+                  (item.category !== 'stool' || w.kind === 'island'),
+              )
               .map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.name} ·{' '}
-                  {w.kind === 'wall' ? wallDirection(room, w) : w.kind === 'partition' ? 'Partition' : 'Island'}
+                  {runName(w.name)} ·{' '}
+                  {w.kind === 'wall'
+                    ? directionName(wallDirection(room, w))
+                    : w.kind === 'partition'
+                      ? t('Partition')
+                      : t('Island')}
                 </option>
               ))}
           </select>
@@ -410,7 +431,7 @@ export function Inspector({
           <Field label="Y elevation (from floor)">
             {item.category === 'door' ? (
               <div className="rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500">
-                0 cm · doors stand on the floor
+                {t('0 cm · doors stand on the floor')}
               </div>
             ) : layer === 'upper' ? (
               <NumField
@@ -421,7 +442,7 @@ export function Inspector({
               />
             ) : layer === 'counter' ? (
               <div className="rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500">
-                {fmt(item.y)} cm · auto-snapped to countertop
+                {t('{cm} cm · auto-snapped to countertop', { cm: fmt(item.y) })}
               </div>
             ) : (
               <div className="flex gap-1.5">
@@ -435,7 +456,7 @@ export function Inspector({
                 />
                 <button
                   className="btn"
-                  title={yUnlocked ? 'Lock to floor (Y = 0)' : 'Unlock elevation'}
+                  title={yUnlocked ? t('Lock to floor (Y = 0)') : t('Unlock elevation')}
                   onClick={() => {
                     if (yUnlocked) onChange({ y: 0 });
                     setYUnlocked(!yUnlocked);
@@ -497,7 +518,7 @@ export function Inspector({
                   checked={item.hasToeKick}
                   onChange={(e) => onChange({ hasToeKick: e.target.checked })}
                 />
-                Enabled
+                {t('Enabled')}
               </label>
               <NumField
                 className="flex-1"
@@ -518,7 +539,7 @@ export function Inspector({
                 checked={!item.noCountertop}
                 onChange={(e) => onChange({ noCountertop: e.target.checked ? undefined : true })}
               />
-              Has countertop
+              {t('Has countertop')}
             </label>
           </Field>
         )}
@@ -548,7 +569,7 @@ export function Inspector({
                     options={[1, 2] as (1 | 2)[]}
                     value={item.doorCount}
                     onChange={(doorCount) => onChange({ doorCount })}
-                    render={(n) => `${n} Door${n > 1 ? 's' : ''}`}
+                    render={(n) => (n > 1 ? t('{n} Doors', { n }) : t('1 Door'))}
                   />
                 </Field>
               )}
@@ -587,7 +608,7 @@ export function Inspector({
               options={[1, 2] as (1 | 2)[]}
               value={item.sinkBowls ?? 1}
               onChange={(sinkBowls) => onChange({ sinkBowls })}
-              render={(n) => `${n} Bowl${n > 1 ? 's' : ''}`}
+              render={(n) => (n > 1 ? t('{n} Bowls', { n }) : t('1 Bowl'))}
             />
           </Field>
           <label className="flex items-center gap-1.5 text-sm">
@@ -596,7 +617,7 @@ export function Inspector({
               checked={item.hasFaucet ?? true}
               onChange={(e) => onChange({ hasFaucet: e.target.checked })}
             />
-            Show faucet
+            {t('Show faucet')}
           </label>
         </Section>
       )}
@@ -609,7 +630,7 @@ export function Inspector({
                 options={[1, 2, 3, 4] as (1 | 2 | 3 | 4)[]}
                 value={item.socketCount ?? 1}
                 onChange={(n) => onChange({ socketCount: n, width: socketWidth(n) })}
-                render={(n) => socketName({ category: 'socket', socketCount: n }).replace(' socket', '')}
+                render={(n) => ['Single', 'Double', 'Triple', 'Quadruple'][n - 1]}
               />
             </Field>
           )}
@@ -628,7 +649,7 @@ export function Inspector({
             />
           </Field>
           <p className="font-mono text-[11px] text-slate-400">
-            {socketName(item)} · plate {fmt(item.width)} × {fmt(item.height)} cm
+            {t(socketName(item))} · {t('plate {w} × {h} cm', { w: fmt(item.width), h: fmt(item.height) })}
           </p>
         </Section>
       )}
@@ -668,6 +689,42 @@ export function Inspector({
               render={(t) => FRIDGE_TYPE_LABELS[t]}
             />
           </Field>
+          {item.fridgeType === 'top_bottom' && (
+            <Field label="Hinges (doors open towards the other side)">
+              <Chips
+                options={['left', 'right'] as const}
+                value={item.doorHinge ?? 'left'}
+                onChange={(doorHinge) => onChange({ doorHinge })}
+                render={(h) => (h === 'left' ? 'Left' : 'Right')}
+              />
+            </Field>
+          )}
+        </Section>
+      )}
+
+      {item.category === 'stool' && (
+        <Section title="Stool">
+          <Field label="Type">
+            <Chips
+              options={['bar', 'counter'] as const}
+              value={item.stoolType ?? 'bar'}
+              onChange={(stoolType) => onChange({ stoolType, height: STOOL_SEAT_CM[stoolType] })}
+              render={(v) => (v === 'bar' ? 'Bar (seat 75)' : 'Counter (seat 65)')}
+            />
+          </Field>
+        </Section>
+      )}
+
+      {item.category === 'dishwasher' && (
+        <Section title="Dishwasher">
+          <Field label="Front">
+            <Chips
+              options={['integrated', 'visible'] as const}
+              value={item.dishwasherFront ?? 'integrated'}
+              onChange={(dishwasherFront) => onChange({ dishwasherFront })}
+              render={(v) => (v === 'integrated' ? 'Integrated (cabinet front)' : 'Visible (stainless)')}
+            />
+          </Field>
         </Section>
       )}
 
@@ -680,19 +737,29 @@ export function Inspector({
               onChange={(burnerCount) => onChange({ burnerCount })}
             />
           </Field>
+          <Field label="Type">
+            <Chips
+              options={['electric', 'induction', 'gas'] as const}
+              value={item.cooktopType ?? 'electric'}
+              onChange={(cooktopType) => onChange({ cooktopType })}
+              render={(k) => ({ electric: 'Electric', induction: 'Induction', gas: 'Gas' })[k]}
+            />
+          </Field>
         </Section>
       )}
 
       <Section title="Actions">
         <div className="flex gap-2">
           <button className="btn flex-1 justify-center" onClick={onDuplicate}>
-            <Copy size={14} /> Duplicate
+            <Copy size={14} /> {t('Duplicate')}
           </button>
           <button className="btn flex-1 justify-center border-red-300 text-red-600 hover:bg-red-50" onClick={onDelete}>
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} /> {t('Delete')}
           </button>
         </div>
-        <p className="text-[11px] text-slate-400">Del / Backspace deletes · Arrow keys nudge 1 cm (Shift = 10 cm)</p>
+        <p className="text-[11px] text-slate-400">
+          {t('Del / Backspace deletes · Arrow keys nudge 1 cm (Shift = 10 cm)')}
+        </p>
       </Section>
     </div>
   );
